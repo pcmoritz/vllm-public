@@ -73,6 +73,9 @@ class MoE(nn.Module):
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
+        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "w") as f:
+            import json
+            f.write(json.dumps({"loaded_weight_shape": repr(loaded_weight.shape)}))
         param_data = param.data
         shard_size = param_data.shape[1]
         w_shard = loaded_weight[:,tp_rank * shard_size: (tp_rank+1) * shard_size].t()

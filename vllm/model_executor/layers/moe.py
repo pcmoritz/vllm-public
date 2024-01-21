@@ -75,9 +75,9 @@ class MoE(nn.Module):
         tp_rank = get_tensor_model_parallel_rank()
         loaded_weight = loaded_weight.t()
         param_data = param.data
-        shard_size = param_data.shape[1]
+        shard_size = param_data.shape[2]
         start_idx = tp_rank * shard_size
-        loaded_weight = loaded_weight.narrow(0, start_idx,
+        loaded_weight = loaded_weight.narrow(1, start_idx,
                                              shard_size)
         assert param_data[expert_id].shape == loaded_weight.shape, \
             f"{param_data[expert_id].shape}, {loaded_weight.shape}"

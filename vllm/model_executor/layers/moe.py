@@ -92,9 +92,9 @@ class MoE(nn.Module):
                         selected_experts: torch.Tensor,
                         routing_weights: torch.Tensor) -> torch.Tensor:
         return fused_moe(hidden_states,
-                         self.w1s.transpose(-1, -2),
-                         self.w2s.transpose(-1, -2),
-                         self.w3s.transpose(-1, -2),
+                         self.w1s.transpose(-1, -2).contiguous(),
+                         self.w2s.transpose(-1, -2).contiguous(),
+                         self.w3s.transpose(-1, -2).contiguous(),
                          routing_weights,
                          selected_experts,
                          inplace=True)

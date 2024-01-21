@@ -46,8 +46,8 @@ class MoE(nn.Module):
 
         self.w1s = nn.Parameter(
             torch.empty(self.num_total_experts,
-                        self.intermediate_size,
                         self.hidden_size,
+                        self.intermediate_size,
                         device="cuda"))
         self.w2s = nn.Parameter(
             torch.empty(self.num_total_experts,
@@ -56,8 +56,8 @@ class MoE(nn.Module):
                         device="cuda"))
         self.w3s = nn.Parameter(
             torch.empty(self.num_total_experts,
-                        self.intermediate_size,
                         self.hidden_size,
+                        self.intermediate_size,
                         device="cuda"))
 
         set_weight_attrs(self.w1s, {
@@ -66,7 +66,7 @@ class MoE(nn.Module):
         })
         set_weight_attrs(self.w2s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "column"
+            "tp_type": "row"
         })
         set_weight_attrs(self.w3s, {
             "weight_loader": self.weight_loader,
@@ -85,8 +85,7 @@ class MoE(nn.Module):
         start_idx = tp_rank * shard_size
         loaded_weight = loaded_weight.narrow(parallel_dim, start_idx,
                                              shard_size)
-        assert param_data[expert_id].shape == loaded_weight.shape, \
-            f"{param_data[expert_id].shape}, {loaded_weight.shape}"
+        assert param_data[expert_id].shape == loaded_weight.shape
         param_data[expert_id].copy_(loaded_weight)
 
     def fused_moe_infer(self, hidden_states: torch.Tensor,

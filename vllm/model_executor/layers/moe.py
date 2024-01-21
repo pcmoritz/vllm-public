@@ -75,14 +75,18 @@ class MoE(nn.Module):
         tp_rank = get_tensor_model_parallel_rank()
         with open(f"/tmp/weights-metadata-{tp_rank}.txt", "w") as f:
             import json
-            f.write(json.dumps({"loaded_weight_shape": repr(loaded_weight.shape)}))
+            f.write(json.dumps({"loaded_weight_shape": repr(loaded_weight.shape)}) + "\n")
         param_data = param.data
         shard_size = param_data.shape[1]
-        w_shard = loaded_weight[:,tp_rank * shard_size: (tp_rank+1) * shard_size].t()
+        w_shard = loaded_weight[:,tp_rank * shard_size: (tp_rank+1) * shard_size]
+        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
+            import json
+            f.write(json.dumps({"w_shard_shape": repr(w_shard.shape)}) + "\n")
+        w_shard = w_shard.contiguous().t()
         with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
             import json
             f.write(json.dumps({"tp_rank": tp_rank, "shard_size": shard_size,
-                                "w_shard_shape": repr(w_shard.shape)}))
+                                "w_shard_shape": repr(w_shard.shape)}) + "\n")
         assert param_data[expert_id].shape == w_shard.shape, \
             f"{param_data[expert_id].shape}, {w_shard.shape}"
         param_data[expert_id].copy_(w_shard)

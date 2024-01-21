@@ -62,31 +62,25 @@ class MoE(nn.Module):
 
         set_weight_attrs(self.w1s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "column"
         })
         set_weight_attrs(self.w2s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "row"
         })
         set_weight_attrs(self.w3s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "column"
         })
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
         loaded_weight = loaded_weight.t()
-        # The parallel dimension is 1 for column-parallel, and 0 for
-        # row-parallel.
-        parallel_dim = 1 if getattr(param, "tp_type", None) == "column" else 0
         param_data = param.data
-        shard_size = param_data.shape[parallel_dim + 1]
+        shard_size = param_data.shape[1]
         start_idx = tp_rank * shard_size
-        loaded_weight = loaded_weight.narrow(parallel_dim, start_idx,
+        loaded_weight = loaded_weight.narrow(0, start_idx,
                                              shard_size)
         assert param_data[expert_id].shape == loaded_weight.shape, \
-            f"{param_data[expert_id].shape}, {loaded_weight.shape}, {parallel_dim}"
+            f"{param_data[expert_id].shape}, {loaded_weight.shape}"
         param_data[expert_id].copy_(loaded_weight)
 
     def fused_moe_infer(self, hidden_states: torch.Tensor,

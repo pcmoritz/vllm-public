@@ -85,7 +85,8 @@ class MoE(nn.Module):
         start_idx = tp_rank * shard_size
         loaded_weight = loaded_weight.narrow(parallel_dim, start_idx,
                                              shard_size)
-        assert param_data[expert_id].shape == loaded_weight.shape
+        assert param_data[expert_id].shape == loaded_weight.shape, \
+            f"{param_data[expert_id].shape}, {loaded_weight.shape}"
         param_data[expert_id].copy_(loaded_weight)
 
     def fused_moe_infer(self, hidden_states: torch.Tensor,

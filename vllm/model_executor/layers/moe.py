@@ -336,7 +336,7 @@ def fused_moe(hidden_states: torch.Tensor,
     """
     # Check constraints.
     assert hidden_states.shape[1] == w1.shape[2], \
-            f"Incompatible dimensions: ({hidden_states.shape[1], w1.shape[2]})"
+            f"Incompatible dimensions: ({hidden_states.shape, w1.shape})"
     assert hidden_states.is_contiguous(), "Matrix A must be contiguous"
     assert w1.is_contiguous(), "Matrix B must be contiguous"
     assert hidden_states.dtype in [torch.float16, torch.bfloat16]

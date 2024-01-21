@@ -46,8 +46,8 @@ class MoE(nn.Module):
 
         self.w1s = nn.Parameter(
             torch.empty(self.num_total_experts,
-                        self.hidden_size,
                         self.intermediate_size,
+                        self.hidden_size,
                         device="cuda"))
         self.w2s = nn.Parameter(
             torch.empty(self.num_total_experts,
@@ -56,13 +56,13 @@ class MoE(nn.Module):
                         device="cuda"))
         self.w3s = nn.Parameter(
             torch.empty(self.num_total_experts,
-                        self.hidden_size,
                         self.intermediate_size,
+                        self.hidden_size,
                         device="cuda"))
 
         set_weight_attrs(self.w1s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "column"
+            "tp_type": "row"
         })
         set_weight_attrs(self.w2s, {
             "weight_loader": self.weight_loader,
@@ -70,7 +70,7 @@ class MoE(nn.Module):
         })
         set_weight_attrs(self.w3s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "column"
+            "tp_type": "row"
         })
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
@@ -92,9 +92,9 @@ class MoE(nn.Module):
                         selected_experts: torch.Tensor,
                         routing_weights: torch.Tensor) -> torch.Tensor:
         return fused_moe(hidden_states,
-                         self.w1s.transpose(-1, -2).contiguous(),
-                         self.w2s.transpose(-1, -2).contiguous(),
-                         self.w3s.transpose(-1, -2).contiguous(),
+                         self.w1s,
+                         self.w2s,
+                         self.w3s,
                          routing_weights,
                          selected_experts,
                          inplace=True)

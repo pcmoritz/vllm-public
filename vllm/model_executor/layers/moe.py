@@ -92,8 +92,9 @@ class MoE(nn.Module):
                         selected_experts: torch.Tensor,
                         routing_weights: torch.Tensor) -> torch.Tensor:
         return fused_moe(hidden_states,
-                         self.w1,
-                         self.w2,
+                         self.w1s,
+                         self.w2s,
+                         self.w3s,
                          routing_weights,
                          selected_experts,
                          inplace=True)
@@ -314,6 +315,7 @@ def alig_block_size(
 def fused_moe(hidden_states: torch.Tensor,
               w1: torch.Tensor,
               w2: torch.Tensor,
+              w3: torch.Tensor,
               topk_weights: torch.Tensor,
               topk_ids: torch.Tensor,
               inplace=False):
@@ -324,6 +326,7 @@ def fused_moe(hidden_states: torch.Tensor,
     - hidden_states (torch.Tensor): The input tensor to the MoE layer.
     - w1 (torch.Tensor): The first set of expert weights.
     - w2 (torch.Tensor): The second set of expert weights.
+    - w3 (torch.Tensor): The third set of expert weights.
     - topk_weights (torch.Tensor): The weights for the top-k selected experts.
     - topk_ids (torch.Tensor): The indices of the top-k selected experts.
     - inplace (bool): If True, perform the operation in-place. Defaults to False.
@@ -361,6 +364,9 @@ def fused_moe(hidden_states: torch.Tensor,
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
+                                      device=hidden_states.device,
+                                      dtype=hidden_states.dtype)
+    intermediate_cache4 = torch.empty((M, topk_ids.shape[1], w3.shape[1]),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
 
@@ -431,9 +437,43 @@ def fused_moe(hidden_states: torch.Tensor,
         if hidden_states.dtype == torch.bfloat16 else tl.float16,
         **config,
     )
+
+    grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[
+        'BLOCK_SIZE_M']) * triton.cdiv(w3.shape[1], META['BLOCK_SIZE_N']), )
+    fused_moe_kernel[grid](
+        intermediate_cache3,
+        w3,
+        intermediate_cache4,
+        topk_weights,
+        sorted_token_ids,
+        expert_ids,
+        num_tokens_post_padded,
+        M,
+        w3.shape[1],
+        w3.shape[2],
+        sorted_token_ids.shape[0],
+        topk_ids.numel(),
+        intermediate_cache3.stride(0),
+        intermediate_cache3.stride(1),
+        w3.stride(0),
+        w3.stride(2),
+        w3.stride(1),
+        intermediate_cache4.stride(1),
+        intermediate_cache4.stride(2),
+        topk_weights.stride(1),
+        sorted_token_ids.stride(0),
+        MUL_ROUTED_WEIGHT=True,
+        top_k=1,  #
+        compute_type=tl.bfloat16
+        if hidden_states.dtype == torch.bfloat16 else tl.float16,
+        **config,
+    )
+
+    ops.silu_and_mul(intermediate_cache4, intermediate_cache3.view(-1, N))
+
     if inplace:
-        return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
+        return torch.sum(intermediate_cache4.view(*intermediate_cache4.shape),
                          dim=1,
                          out=hidden_states)
-    return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
+    return torch.sum(intermediate_cache4.view(*intermediate_cache4.shape),
                      dim=1)

@@ -78,7 +78,7 @@ class MoE(nn.Module):
             f.write(json.dumps({"loaded_weight_shape": repr(loaded_weight.shape)}))
         param_data = param.data
         shard_size = param_data.shape[1]
-        w_shard = loaded_weight[:,tp_rank * shard_size: (tp_rank+1) * shard_size].t()
+        w_shard = loaded_weight[tp_rank * shard_size: (tp_rank+1) * shard_size,:]
         assert param_data[expert_id].shape == w_shard.shape, \
             f"{param_data[expert_id].shape}, {w_shard.shape}"
         param_data[expert_id].copy_(w_shard)

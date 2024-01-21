@@ -73,12 +73,9 @@ class MoE(nn.Module):
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
-        loaded_weight = loaded_weight.t()
         param_data = param.data
         shard_size = param_data.shape[1]
-        start_idx = tp_rank * shard_size
-        loaded_weight = loaded_weight.narrow(0, start_idx,
-                                             shard_size)
+        loaded_weight = loaded_weight[:,tp_rank * shard_size: (tp_rank+1) * shard_size]
         assert param_data[expert_id].shape == loaded_weight.shape, \
             f"{param_data[expert_id].shape}, {loaded_weight.shape}"
         param_data[expert_id].copy_(loaded_weight)

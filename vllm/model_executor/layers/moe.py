@@ -62,15 +62,15 @@ class MoE(nn.Module):
 
         set_weight_attrs(self.w1s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "row"
+            "tp_type": "column"
         })
         set_weight_attrs(self.w2s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "row"
+            "tp_type": "column"
         })
         set_weight_attrs(self.w3s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "row"
+            "tp_type": "column"
         })
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,

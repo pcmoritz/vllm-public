@@ -79,6 +79,10 @@ class MoE(nn.Module):
         param_data = param.data
         shard_size = param_data.shape[1]
         w_shard = loaded_weight[:,tp_rank * shard_size: (tp_rank+1) * shard_size].t()
+        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
+            import json
+            f.write(json.dumps({"tp_rank": tp_rank, "shard_size": shard_size,
+                                "w_shard_shape": repr(w_shard.shape)}))
         assert param_data[expert_id].shape == w_shard.shape, \
             f"{param_data[expert_id].shape}, {w_shard.shape}"
         param_data[expert_id].copy_(w_shard)

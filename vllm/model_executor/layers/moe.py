@@ -75,10 +75,10 @@ class MoE(nn.Module):
         tp_rank = get_tensor_model_parallel_rank()
         param_data = param.data
         shard_size = param_data.shape[1]
-        loaded_weight = loaded_weight[:,tp_rank * shard_size: (tp_rank+1) * shard_size]
-        assert param_data[expert_id].shape == loaded_weight.shape, \
-            f"{param_data[expert_id].shape}, {loaded_weight.shape}"
-        param_data[expert_id].copy_(loaded_weight)
+        w_shard = loaded_weight[:,tp_rank * shard_size: (tp_rank+1) * shard_size].t()
+        assert param_data[expert_id].shape == w_shard.shape, \
+            f"{param_data[expert_id].shape}, {w_shard.shape}"
+        param_data[expert_id].copy_(w_shard)
 
     def fused_moe_infer(self, hidden_states: torch.Tensor,
                         selected_experts: torch.Tensor,

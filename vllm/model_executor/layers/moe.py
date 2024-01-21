@@ -438,6 +438,8 @@ def fused_moe(hidden_states: torch.Tensor,
         **config,
     )
 
+    ops.silu_and_mul(intermediate_cache3, intermediate_cache2.view(-1, N))
+
     grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[
         'BLOCK_SIZE_M']) * triton.cdiv(w3.shape[1], META['BLOCK_SIZE_N']), )
     fused_moe_kernel[grid](

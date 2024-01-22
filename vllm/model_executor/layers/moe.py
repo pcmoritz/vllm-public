@@ -57,24 +57,24 @@ class MoE(nn.Module):
 
         set_weight_attrs(self.ws, {
             "weight_loader": self.weight_loader,
+            "shard_dim": 1
         })
         set_weight_attrs(self.w2s, {
             "weight_loader": self.weight_loader,
+            "shard_dim": 2
         })
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       weight_name: str, expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
+        shard_dim = getattr(param, "shard_dim", None)
         param_data = param.data
-        if weight_name.endswith("w2.weight"):
-            shard_size = param_data.shape[2]
-            data = loaded_weight[:,(tp_rank * shard_size): (tp_rank+1) * shard_size]
-        else:
-            shard_size = param_data.shape[1]
-            data = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]
-        assert param_data[expert_id].shape == data.shape, \
-            f"{param_data[expert_id].shape}, {data.shape}"
-        param_data[expert_id][:,:] = data
+        shard_size = param_data.shape[shard_dim]
+        start_idx = tp_rank * shard_size
+        loaded_weight = loaded_weight.narrow(shard_dim, start_idx, shard_size)
+        assert param_data[expert_id].shape == loaded_weight.shape, \
+            f"{param_data[expert_id].shape}, {loaded_weight.shape}"
+        param_data[expert_id].copy_(loaded_weight)
 
 
     def fused_moe_infer(self, hidden_states: torch.Tensor,

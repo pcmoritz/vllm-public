@@ -78,7 +78,8 @@ class MoE(nn.Module):
                 shard = slice(0, self.intermediate_size)
             elif weight_name.endswith("w3.weight"):
                 shard = slice(self.intermediate_size, None)
-            assert param_data[expert_id][shard,:].shape == data.shape
+            assert param_data[expert_id][shard,:].shape == data.shape, \
+                f"{param_data[expert_id][shard,:].shape}, {data.shape}"
             param_data[expert_id][shard,:] = data
 
 

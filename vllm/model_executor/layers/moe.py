@@ -76,8 +76,9 @@ class MoE(nn.Module):
             "tp_type": "column"
         })
 
-        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "w") as f:
-            f.write("")
+        for i in range(8):
+            with open(f"/tmp/weights-metadata-{i}.txt", "w") as f:
+                f.write("")
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       expert_id: int):

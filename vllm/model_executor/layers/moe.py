@@ -60,6 +60,9 @@ class MoE(nn.Module):
                         self.hidden_size,
                         device="cuda"))
         
+        # TODO: Currently this is fake data but should be
+        # [self.w1s, self.w3s] concatenated along the intermediate
+        # size dimension.
         self.ws = nn.Parameter(
             torch.randn(self.num_total_experts,
                         2 * self.intermediate_size,
@@ -68,33 +71,20 @@ class MoE(nn.Module):
 
         set_weight_attrs(self.w1s, {
             "weight_loader": self.weight_loader,
-            "weight_name": "w1",
             "tp_type": "column"
         })
         set_weight_attrs(self.w2s, {
             "weight_loader": self.weight_loader,
-            "weight_name": "w2",
             "tp_type": "row"
         })
         set_weight_attrs(self.w3s, {
             "weight_loader": self.weight_loader,
-            "weight_name": "w3",
             "tp_type": "column"
         })
-
-        for i in range(8):
-            with open(f"/tmp/weights-metadata-{i}.txt", "w") as f:
-                f.write("")
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
-        # if getattr(param, "tp_type", None) == "row":
-        #     loaded_weight = loaded_weight.t()
-        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
-            import json
-            f.write(json.dumps({"loaded_weight_shape": repr(loaded_weight.shape),
-                                "weight_index:": getattr(param, "weight_name", None)}) + "\n")
         param_data = param.data
         if getattr(param, "tp_type", None) == "row":
             shard_size = param_data.shape[2]
@@ -102,13 +92,6 @@ class MoE(nn.Module):
         else:
             shard_size = param_data.shape[1]
             w_shard = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]
-        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
-            import json
-            f.write(json.dumps({"w_shard_shape": repr(w_shard.shape)}) + "\n")
-        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
-            import json
-            f.write(json.dumps({"tp_rank": tp_rank, "shard_size": shard_size,
-                                "w_shard_shape": repr(w_shard.shape)}) + "\n")
         assert param_data[expert_id].shape == w_shard.shape, \
             f"{param_data[expert_id].shape}, {w_shard.shape}"
         param_data[expert_id].copy_(w_shard)
@@ -141,10 +124,6 @@ class MoE(nn.Module):
                                                    selected_experts,
                                                    routing_weights)
         
-        with open(f"/tmp/logs.txt", "a") as f:
-            import json
-            f.write(json.dumps({"final_hidden_shape": repr(final_hidden_states.shape)}) + "\n")
-
         final_hidden_states = tensor_model_parallel_all_reduce(
             final_hidden_states)
 

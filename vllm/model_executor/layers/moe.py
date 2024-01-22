@@ -145,8 +145,11 @@ class MoE(nn.Module):
             import json
             f.write(json.dumps({"final_hidden_shape": repr(final_hidden_states.shape)}) + "\n")
 
-        return tensor_model_parallel_all_reduce(
+        final_hidden_states = tensor_model_parallel_all_reduce(
             final_hidden_states)
+
+        return final_hidden_states.view(batch_size, sequence_length,
+                                        hidden_size)
 
 
 

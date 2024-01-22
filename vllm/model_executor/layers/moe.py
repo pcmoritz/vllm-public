@@ -59,6 +59,12 @@ class MoE(nn.Module):
                         self.intermediate_size,
                         self.hidden_size,
                         device="cuda"))
+        
+        self.ws = nn.Parameter(
+            torch.randn(self.num_total_experts,
+                        2 * self.intermediate_size,
+                        self.hidden_size,
+                        device="cuda"))
 
         set_weight_attrs(self.w1s, {
             "weight_loader": self.weight_loader,
@@ -111,9 +117,10 @@ class MoE(nn.Module):
                         selected_experts: torch.Tensor,
                         routing_weights: torch.Tensor) -> torch.Tensor:
         return fused_moe(hidden_states,
-                         self.w1s,
+                         # self.w1s,
+                         self.ws,
                          self.w2s,
-                         self.w3s,
+                         # self.w3s,
                          routing_weights,
                          selected_experts,
                          inplace=True)
@@ -338,7 +345,6 @@ def alig_block_size(
 def fused_moe(hidden_states: torch.Tensor,
               w1: torch.Tensor,
               w2: torch.Tensor,
-              w3: torch.Tensor,
               topk_weights: torch.Tensor,
               topk_ids: torch.Tensor,
               inplace=False):
@@ -349,7 +355,6 @@ def fused_moe(hidden_states: torch.Tensor,
     - hidden_states (torch.Tensor): The input tensor to the MoE layer.
     - w1 (torch.Tensor): The first set of expert weights.
     - w2 (torch.Tensor): The second set of expert weights.
-    - w3 (torch.Tensor): The third set of expert weights.
     - topk_weights (torch.Tensor): The weights for the top-k selected experts.
     - topk_ids (torch.Tensor): The indices of the top-k selected experts.
     - inplace (bool): If True, perform the operation in-place. Defaults to False.
@@ -358,8 +363,7 @@ def fused_moe(hidden_states: torch.Tensor,
     - torch.Tensor: The output tensor after applying the MoE layer.
     """
     # Check constraints.
-    assert hidden_states.shape[1] == w1.shape[2], \
-            f"Incompatible dimensions: ({hidden_states.shape, w1.shape})"
+    assert hidden_states.shape[1] == w1.shape[2], "Incompatible dimensions"
     assert hidden_states.is_contiguous(), "Matrix A must be contiguous"
     assert w1.is_contiguous(), "Matrix B must be contiguous"
     assert hidden_states.dtype in [torch.float16, torch.bfloat16]
@@ -458,5 +462,9 @@ def fused_moe(hidden_states: torch.Tensor,
         if hidden_states.dtype == torch.bfloat16 else tl.float16,
         **config,
     )
-
-    return intermediate_cache3
+    if inplace:
+        return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
+                         dim=1,
+                         out=hidden_states)
+    return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
+                     dim=1)

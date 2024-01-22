@@ -71,7 +71,7 @@ class MoE(nn.Module):
         param_data = param.data
         shard_size = param_data.shape[shard_dim]
         start_idx = tp_rank * shard_size
-        loaded_weight = loaded_weight.narrow(shard_dim, start_idx, shard_size)
+        loaded_weight = loaded_weight.narrow(shard_dim-1, start_idx, shard_size)
         assert param_data[expert_id].shape == loaded_weight.shape, \
             f"{param_data[expert_id].shape}, {loaded_weight.shape}"
         param_data[expert_id].copy_(loaded_weight)

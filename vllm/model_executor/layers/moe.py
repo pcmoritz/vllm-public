@@ -57,28 +57,23 @@ class MoE(nn.Module):
 
         set_weight_attrs(self.ws, {
             "weight_loader": self.weight_loader,
-            "shard_dim": 1
         })
         set_weight_attrs(self.w2s, {
             "weight_loader": self.weight_loader,
-            "shard_dim": 2
         })
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       weight_name: str, expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
-        shard_dim = getattr(param, "shard_dim", None)
         param_data = param.data
-        shard_size = param_data.shape[shard_dim]
-        start_idx = tp_rank * shard_size
-        print("XXX weight_name = ", weight_name)
-        print("XXX loaded_weight.shape = ", loaded_weight.shape)
-        print("XXX start_idx = ", start_idx)
-        print("XXX shard_size = ", shard_size)
-        loaded_weight = loaded_weight.narrow(shard_dim-1, start_idx, shard_size)
-        assert param_data[expert_id].shape == loaded_weight.shape, \
-            f"{param_data[expert_id].shape}, {loaded_weight.shape}"
-        param_data[expert_id].copy_(loaded_weight)
+        shard_size = self.intermediate_size
+        shard = slice(tp_rank * shard_size, (tp_rank+1) * shard_size)
+        if weight_name.endswith("w1.weight"):
+            param_data[expert_id,0:shard_size,:] = loaded_weight[shard,:]
+        if weight_name.endswith("w3.weight"):
+            param_data[expert_id,shard_size:2*shard_size,:] = loaded_weight[shard,:]
+        if weight_name.endswith("w2.weight"):
+            param_data[expert_id,:,:] = loaded_weight[:,shard]
 
 
     def fused_moe_infer(self, hidden_states: torch.Tensor,

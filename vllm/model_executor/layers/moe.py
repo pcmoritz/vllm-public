@@ -379,10 +379,13 @@ def fused_moe(hidden_states: torch.Tensor,
     intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
-    intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
+    intermediate_cache3 = torch.empty((M, topk_ids.shape[1], N),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
-    intermediate_cache4 = torch.empty((M, topk_ids.shape[1], w3.shape[1]),
+    intermediate_cache4 = torch.empty((M, topk_ids.shape[1], N // 2),
+                                      device=hidden_states.device,
+                                      dtype=hidden_states.dtype)
+    intermediate_cache5 = torch.empty((M, topk_ids.shape[1], w3.shape[1]),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
 
@@ -454,14 +457,14 @@ def fused_moe(hidden_states: torch.Tensor,
         **config,
     )
 
-    ops.silu_and_mul(intermediate_cache3, intermediate_cache2.view(-1, N))
+    ops.silu_and_mul(intermediate_cache4, intermediate_cache3.view(-1, N))
 
     grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[
         'BLOCK_SIZE_M']) * triton.cdiv(w3.shape[1], META['BLOCK_SIZE_N']), )
     fused_moe_kernel[grid](
-        intermediate_cache3,
-        w3,
         intermediate_cache4,
+        w3,
+        intermediate_cache5,
         topk_weights,
         sorted_token_ids,
         expert_ids,
@@ -471,13 +474,13 @@ def fused_moe(hidden_states: torch.Tensor,
         w3.shape[2],
         sorted_token_ids.shape[0],
         topk_ids.numel(),
-        intermediate_cache3.stride(0),
-        intermediate_cache3.stride(1),
+        intermediate_cache4.stride(0),
+        intermediate_cache4.stride(1),
         w3.stride(0),
         w3.stride(2),
         w3.stride(1),
-        intermediate_cache4.stride(1),
-        intermediate_cache4.stride(2),
+        intermediate_cache5.stride(1),
+        intermediate_cache5.stride(2),
         topk_weights.stride(1),
         sorted_token_ids.stride(0),
         MUL_ROUTED_WEIGHT=True,
@@ -487,11 +490,9 @@ def fused_moe(hidden_states: torch.Tensor,
         **config,
     )
 
-    ops.silu_and_mul(intermediate_cache4, intermediate_cache3.view(-1, N))
-
     if inplace:
-        return torch.sum(intermediate_cache4.view(*intermediate_cache4.shape),
+        return torch.sum(intermediate_cache5.view(*intermediate_cache5.shape),
                          dim=1,
                          out=hidden_states)
-    return torch.sum(intermediate_cache4.view(*intermediate_cache4.shape),
+    return torch.sum(intermediate_cache5.view(*intermediate_cache5.shape),
                      dim=1)

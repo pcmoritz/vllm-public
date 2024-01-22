@@ -75,9 +75,9 @@ class MoE(nn.Module):
             shard_size = param_data.shape[1]
             data = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]
             if weight_name.endswith("w1.weight"):
-                target = param_data[expert_id][:,:self.intermediate_size,:]
+                target = param_data[expert_id][:self.intermediate_size,:]
             elif weight_name.endswith("w3.weight"):
-                target = param_data[expert_id][:,self.intermediate_size:,:]
+                target = param_data[expert_id][self.intermediate_size:,:]
             assert target.shape == data.shape
             target.copy_(data)
 

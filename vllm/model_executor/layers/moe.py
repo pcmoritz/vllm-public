@@ -44,9 +44,9 @@ class MoE(nn.Module):
                                      bias=False,
                                      linear_method=None)
 
-        self.w1s = nn.Parameter(
-            torch.empty(self.num_total_experts,
-                        self.intermediate_size,
+        self.ws = nn.Parameter(
+            torch.randn(self.num_total_experts,
+                        2 * self.intermediate_size,
                         self.hidden_size,
                         device="cuda"))
         self.w2s = nn.Parameter(
@@ -54,47 +54,33 @@ class MoE(nn.Module):
                         self.hidden_size,
                         self.intermediate_size,
                         device="cuda"))
-        self.w3s = nn.Parameter(
-            torch.empty(self.num_total_experts,
-                        self.intermediate_size,
-                        self.hidden_size,
-                        device="cuda"))
-        
-        # TODO: Currently this is fake data but should be
-        # [self.w1s, self.w3s] concatenated along the intermediate
-        # size dimension.
-        self.ws = nn.Parameter(
-            torch.randn(self.num_total_experts,
-                        2 * self.intermediate_size,
-                        self.hidden_size,
-                        device="cuda"))
 
-        set_weight_attrs(self.w1s, {
+        set_weight_attrs(self.ws, {
             "weight_loader": self.weight_loader,
-            "tp_type": "column"
         })
         set_weight_attrs(self.w2s, {
             "weight_loader": self.weight_loader,
-            "tp_type": "row"
-        })
-        set_weight_attrs(self.w3s, {
-            "weight_loader": self.weight_loader,
-            "tp_type": "column"
         })
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
-                      expert_id: int):
+                      weight_name: str, expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
         param_data = param.data
-        if getattr(param, "tp_type", None) == "row":
+        if weight_name.endswith("w2.weight"):
             shard_size = param_data.shape[2]
-            w_shard = loaded_weight[:,(tp_rank * shard_size): (tp_rank+1) * shard_size]
+            data = loaded_weight[:,(tp_rank * shard_size): (tp_rank+1) * shard_size]
+            assert param_data[expert_id].shape == data.shape
+            param_data[expert_id].copy_(data)
         else:
             shard_size = param_data.shape[1]
-            w_shard = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]
-        assert param_data[expert_id].shape == w_shard.shape, \
-            f"{param_data[expert_id].shape}, {w_shard.shape}"
-        param_data[expert_id].copy_(w_shard)
+            data = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]
+            if weight_name.endswith("w1.weight"):
+                target = param_data[expert_id][:,:self.intermediate_size,:]
+            elif weight_name.endswith("w3.weight"):
+                target = param_data[expert_id][:,self.intermediate_size:,:]
+            assert target.shape == data.shape
+            target.copy_(data)
+
 
     def fused_moe_infer(self, hidden_states: torch.Tensor,
                         selected_experts: torch.Tensor,

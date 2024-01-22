@@ -51,8 +51,8 @@ class MoE(nn.Module):
                         device="cuda"))
         self.w2s = nn.Parameter(
             torch.empty(self.num_total_experts,
-                        self.intermediate_size,
                         self.hidden_size,
+                        self.intermediate_size,
                         device="cuda"))
         self.w3s = nn.Parameter(
             torch.empty(self.num_total_experts,
@@ -83,15 +83,19 @@ class MoE(nn.Module):
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
-        if getattr(param, "tp_type", None) == "row":
-            loaded_weight = loaded_weight.t()
+        # if getattr(param, "tp_type", None) == "row":
+        #     loaded_weight = loaded_weight.t()
         with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
             import json
             f.write(json.dumps({"loaded_weight_shape": repr(loaded_weight.shape),
                                 "weight_index:": getattr(param, "weight_name", None)}) + "\n")
         param_data = param.data
-        shard_size = param_data.shape[1]
-        w_shard = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]
+        if getattr(param, "tp_type", None) == "row":
+            shard_size = param_data.shape[2]
+            w_shard = loaded_weight[:,(tp_rank * shard_size): (tp_rank+1) * shard_size]
+        else:
+            shard_size = param_data.shape[1]
+            w_shard = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]
         with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
             import json
             f.write(json.dumps({"w_shard_shape": repr(w_shard.shape)}) + "\n")

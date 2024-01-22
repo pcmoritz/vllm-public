@@ -134,6 +134,10 @@ class MoE(nn.Module):
                                                    selected_experts,
                                                    routing_weights)
         
+        with open(f"/tmp/logs.txt", "a") as f:
+            import json
+            f.write(json.dumps({"final_hidden_shape": repr(final_hidden_states.shape)}) + "\n")
+
         return tensor_model_parallel_all_reduce(
             final_hidden_states)
 

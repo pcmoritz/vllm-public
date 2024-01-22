@@ -457,42 +457,9 @@ def fused_moe(hidden_states: torch.Tensor,
         **config,
     )
 
-    ops.silu_and_mul(intermediate_cache4, intermediate_cache3.view(-1, N))
-
-    grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[
-        'BLOCK_SIZE_M']) * triton.cdiv(w3.shape[1], META['BLOCK_SIZE_N']), )
-    fused_moe_kernel[grid](
-        intermediate_cache4,
-        w3,
-        intermediate_cache5,
-        topk_weights,
-        sorted_token_ids,
-        expert_ids,
-        num_tokens_post_padded,
-        M,
-        w3.shape[1],
-        w3.shape[2],
-        sorted_token_ids.shape[0],
-        topk_ids.numel(),
-        intermediate_cache4.stride(0),
-        intermediate_cache4.stride(1),
-        w3.stride(0),
-        w3.stride(2),
-        w3.stride(1),
-        intermediate_cache5.stride(1),
-        intermediate_cache5.stride(2),
-        topk_weights.stride(1),
-        sorted_token_ids.stride(0),
-        MUL_ROUTED_WEIGHT=True,
-        top_k=1,  #
-        compute_type=tl.bfloat16
-        if hidden_states.dtype == torch.bfloat16 else tl.float16,
-        **config,
-    )
-
     if inplace:
-        return torch.sum(intermediate_cache5.view(*intermediate_cache5.shape),
+        return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
                          dim=1,
                          out=hidden_states)
-    return torch.sum(intermediate_cache5.view(*intermediate_cache5.shape),
+    return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
                      dim=1)

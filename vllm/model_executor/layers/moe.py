@@ -83,7 +83,7 @@ class MoE(nn.Module):
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
-        if getattr(param, "tp_type", None) == "column":
+        if getattr(param, "tp_type", None) == "row":
             loaded_weight = loaded_weight.t()
         with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
             import json

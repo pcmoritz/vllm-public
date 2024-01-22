@@ -72,7 +72,8 @@ class MoE(nn.Module):
         else:
             shard_size = param_data.shape[1]
             data = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]
-        assert param_data[expert_id].shape == data.shape
+        assert param_data[expert_id].shape == data.shape, \
+            f"{param_data[expert_id].shape}, {data.shape}"
         param_data[expert_id][:,:] = data
 
 

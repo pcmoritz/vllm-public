@@ -78,7 +78,7 @@ class MoE(nn.Module):
                 target = param_data[expert_id][:self.intermediate_size,:]
             elif weight_name.endswith("w3.weight"):
                 target = param_data[expert_id][self.intermediate_size:,:]
-            assert target.shape == data.shape
+            assert target.shape == data.shape, f"{target.shape}, {data.shape}"
             target.copy_(data)
 
 

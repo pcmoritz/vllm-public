@@ -73,6 +73,8 @@ class MoE(nn.Module):
         start_idx = tp_rank * shard_size
         print("XXX weight_name = ", weight_name)
         print("XXX loaded_weight.shape = ", loaded_weight.shape)
+        print("XXX start_idx = ", start_idx)
+        print("XXX shard_size = ", shard_size)
         loaded_weight = loaded_weight.narrow(shard_dim-1, start_idx, shard_size)
         assert param_data[expert_id].shape == loaded_weight.shape, \
             f"{param_data[expert_id].shape}, {loaded_weight.shape}"

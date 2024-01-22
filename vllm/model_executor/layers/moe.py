@@ -62,25 +62,32 @@ class MoE(nn.Module):
 
         set_weight_attrs(self.w1s, {
             "weight_loader": self.weight_loader,
+            "weight_name": "w1",
             "tp_type": "column"
         })
         set_weight_attrs(self.w2s, {
             "weight_loader": self.weight_loader,
+            "weight_name": "w2",
             "tp_type": "row"
         })
         set_weight_attrs(self.w3s, {
             "weight_loader": self.weight_loader,
+            "weight_name": "w3",
             "tp_type": "column"
         })
+
+        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "w") as f:
+            f.write("")
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
                       expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
         if getattr(param, "tp_type", None) == "column":
             loaded_weight = loaded_weight.t()
-        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "w") as f:
+        with open(f"/tmp/weights-metadata-{tp_rank}.txt", "a") as f:
             import json
-            f.write(json.dumps({"loaded_weight_shape": repr(loaded_weight.shape)}) + "\n")
+            f.write(json.dumps({"loaded_weight_shape": repr(loaded_weight.shape),
+                                "weight_index:": getattr(param, "weight_name", None)}) + "\n")
         param_data = param.data
         shard_size = param_data.shape[1]
         w_shard = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]

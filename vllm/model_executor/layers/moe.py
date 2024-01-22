@@ -69,18 +69,11 @@ class MoE(nn.Module):
         if weight_name.endswith("w2.weight"):
             shard_size = param_data.shape[2]
             data = loaded_weight[:,(tp_rank * shard_size): (tp_rank+1) * shard_size]
-            assert param_data[expert_id].shape == data.shape
-            param_data[expert_id][:,:] = data
         else:
             shard_size = param_data.shape[1]
             data = loaded_weight[(tp_rank * shard_size): (tp_rank+1) * shard_size,:]
-            if weight_name.endswith("w1.weight"):
-                shard = slice(0, self.intermediate_size)
-            elif weight_name.endswith("w3.weight"):
-                shard = slice(self.intermediate_size, None)
-            assert param_data[expert_id][shard,:].shape == data.shape, \
-                f"{param_data[expert_id][shard,:].shape}, {data.shape}"
-            param_data[expert_id][shard,:] = data
+        assert param_data[expert_id].shape == data.shape
+        param_data[expert_id][:,:] = data
 
 
     def fused_moe_infer(self, hidden_states: torch.Tensor,

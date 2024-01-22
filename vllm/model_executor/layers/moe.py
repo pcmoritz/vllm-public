@@ -45,7 +45,7 @@ class MoE(nn.Module):
                                      linear_method=None)
 
         self.ws = nn.Parameter(
-            torch.randn(self.num_total_experts,
+            torch.empty(self.num_total_experts,
                         2 * self.intermediate_size,
                         self.hidden_size,
                         device="cuda"))
@@ -69,8 +69,10 @@ class MoE(nn.Module):
         tp_rank = get_tensor_model_parallel_rank()
         shard_dim = getattr(param, "shard_dim", None)
         param_data = param.data
-        shard_size = self.intermediate_size
+        shard_size = param_data.shape[shard_dim]
         start_idx = tp_rank * shard_size
+        print("XXX weight_name = ", weight_name)
+        print("XXX loaded_weight.shape = ", loaded_weight.shape)
         loaded_weight = loaded_weight.narrow(shard_dim-1, start_idx, shard_size)
         assert param_data[expert_id].shape == loaded_weight.shape, \
             f"{param_data[expert_id].shape}, {loaded_weight.shape}"

@@ -1,3 +1,8 @@
+#include <torch/extension.h>
+#include <ATen/cuda/CUDAContext.h>
+
+#include "dispatch_utils.h"
+
 
 #define BLOCK_SIZE_M 64
 #define BLOCK_SIZE_N 64
@@ -80,7 +85,7 @@ __global__ void fused_moe_kernel(
     }
 
     // Calculate pointers for A and B matrices
-    float* a_ptrs[BLOCK_SIZE_M][BLOCK_SIZE_K];
+    scalar_t* a_ptrs[BLOCK_SIZE_M][BLOCK_SIZE_K];
     for (int m = 0; m < BLOCK_SIZE_M; ++m) {
         for (int k = 0; k < BLOCK_SIZE_K; ++k) {
             int offs_token = sorted_token_ids[OFFSET_TOKEN_ID(m)];
@@ -89,7 +94,7 @@ __global__ void fused_moe_kernel(
     }
 
     int off_experts = expert_ids[pid_m] * stride_be;
-    float* b_ptrs[BLOCK_SIZE_K][BLOCK_SIZE_N];
+    scalar_t* b_ptrs[BLOCK_SIZE_K][BLOCK_SIZE_N];
     for (int k = 0; k < BLOCK_SIZE_K; ++k) {
         for (int n = 0; n < BLOCK_SIZE_N; ++n) {
             b_ptrs[k][n] = b + off_experts + (k * stride_bk) + (OFFS_BN(n) * stride_bn);
@@ -103,7 +108,7 @@ __global__ void fused_moe_kernel(
     // `accumulator` will be converted back to fp16 after the loop.
 
     // Initialize the accumulator
-    float accumulator[BLOCK_SIZE_M][BLOCK_SIZE_N] = {0};
+    scalar_t accumulator[BLOCK_SIZE_M][BLOCK_SIZE_N] = {0};
 
     // Loop over K dimension in blocks
     for (int k = 0; k < (K + BLOCK_SIZE_K - 1) / BLOCK_SIZE_K; ++k) {
@@ -177,3 +182,46 @@ __global__ void fused_moe_kernel(
 }
 
 } // namespace
+
+void fused_moe(
+    torch::Tensor A,
+    torch::Tensor B,
+    torch::Tensor C,
+    torch::Tensor topk_weights,
+    torch::Tensor topk_ids,
+    torch::Tensor sorted_token_ids,
+    torch::Tensor expert_ids,
+    torch::Tensor num_tokens_post_padded,
+    bool MUL_ROUTED_WEIGHT,
+    int top_k) {
+    const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    // assert(num_experts <= NUM_MAX_EXPERTS);
+    VLLM_DISPATCH_FLOATING_TYPES(
+        A.scalar_type(), "fused_moe_kernel", [&] {
+        vllm::fused_moe_kernel<scalar_t><<<1, 10, 0, stream>>>(
+            A.data_ptr<scalar_t>(),
+            B.data_ptr<scalar_t>(),
+            C.data_ptr<scalar_t>(),
+            topk_weights.data_ptr<scalar_t>(),
+            sorted_token_ids.data_ptr<int32_t>(),
+            expert_ids.data_ptr<int32_t>(),
+            num_tokens_post_padded.data_ptr<int32_t>(),
+            A.size(0),
+            B.size(1),
+            A.size(1),
+            sorted_token_ids.size(0),
+            topk_ids.numel(),
+            A.stride(0),
+            A.stride(1),
+            B.stride(0),
+            B.stride(2),
+            B.stride(1),
+            C.stride(1),
+            C.stride(2),
+            topk_weights.stride(1),
+            sorted_token_ids.stride(0),
+            MUL_ROUTED_WEIGHT,
+            top_k
+	);
+    });
+}

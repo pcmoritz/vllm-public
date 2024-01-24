@@ -98,3 +98,13 @@ void moe_alig_block_size(
   torch::Tensor experts_ids,
   torch::Tensor num_tokens_post_pad
   );
+
+void fused_moe(
+  torch::Tensor A,
+  torch::Tensor B,
+  torch::Tensor C,
+  torch::Tensor topk_weights,
+  torch::Tensor topk_ids,
+  bool MUL_ROUTED_WEIGHT,
+  int top_k
+);

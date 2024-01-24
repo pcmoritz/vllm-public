@@ -22,7 +22,18 @@ __global__ void fused_moe_kernel(
     const int K,
     const int EM,
     const int num_valid_tokens,
-
+    // The stride variables represent how much to increase the ptr by when moving by 1
+    // element in a particular dimension. E.g. `stride_am` is how much to increase `a_ptr`
+    // by to get the element one row down (A has M rows).
+    const int stride_am,
+    const int stride_ak,
+    const int stride_be,
+    const int stride_bk,
+    const int stride_bn,
+    const int stride_cm,
+    const int stride_cn,
+    const int stride_weight,
+    const int stride_token_id
 ) {
     // Calculate the global thread ID
     int pid = blockIdx.x * blockDim.x + threadIdx.x;

@@ -36,7 +36,7 @@ __global__ void fused_moe_kernel(
     const int stride_weight,
     const int stride_token_id,
     const bool MUL_ROUTED_WEIGHT,
-    const int top_k,
+    const int top_k
 ) {
     // Calculate the global thread ID
     int pid = blockIdx.x * blockDim.x + threadIdx.x;

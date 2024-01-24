@@ -85,7 +85,7 @@ __global__ void fused_moe_kernel(
         }
     }
 
-    int off_experts = expert_ids_ptr[pid_m] * stride_be;
+    int off_experts = expert_ids[pid_m] * stride_be;
     float* b_ptrs[BLOCK_SIZE_K][BLOCK_SIZE_N];
     for (int k = 0; k < BLOCK_SIZE_K; ++k) {
         for (int n = 0; n < BLOCK_SIZE_N; ++n) {
@@ -152,7 +152,7 @@ __global__ void fused_moe_kernel(
         for (int m = 0; m < BLOCK_SIZE_M; ++m) {
             if (token_mask[m]) {
                 int weight_index = sorted_token_ids[OFFSET_TOKEN_ID(m)] * stride_weight;
-                float moe_weight = topk_weights_ptr[weight_index];
+                float moe_weight = topk_weights[weight_index];
                 for (int n = 0; n < BLOCK_SIZE_N; ++n) {
                     accumulator[m][n] *= moe_weight;
                 }

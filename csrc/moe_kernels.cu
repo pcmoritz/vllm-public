@@ -72,7 +72,7 @@ __global__ void fused_moe_kernel(
     // Load sorted token ids and create token mask
     bool token_mask[BLOCK_SIZE_M];
     for (int i = 0; i < BLOCK_SIZE_M; ++i) {
-        int offs_token = sorted_token_ids_ptr[OFFSET_TOKEN_ID(i)];
+        int offs_token = sorted_token_ids[OFFSET_TOKEN_ID(i)];
         token_mask[i] = offs_token < num_valid_tokens;
     }
 
@@ -80,7 +80,7 @@ __global__ void fused_moe_kernel(
     float* a_ptrs[BLOCK_SIZE_M][BLOCK_SIZE_K];
     for (int m = 0; m < BLOCK_SIZE_M; ++m) {
         for (int k = 0; k < BLOCK_SIZE_K; ++k) {
-            int offs_token = sorted_token_ids_ptr[OFFSET_TOKEN_ID(m)];
+            int offs_token = sorted_token_ids[OFFSET_TOKEN_ID(m)];
             a_ptrs[m][k] = a_ptr + (offs_token / top_k * stride_am) + (k * stride_ak);
         }
     }
@@ -151,7 +151,7 @@ __global__ void fused_moe_kernel(
     if (MUL_ROUTED_WEIGHT) {
         for (int m = 0; m < BLOCK_SIZE_M; ++m) {
             if (token_mask[m]) {
-                int weight_index = sorted_token_ids_ptr[OFFSET_TOKEN_ID(m)] * stride_weight;
+                int weight_index = sorted_token_ids[OFFSET_TOKEN_ID(m)] * stride_weight;
                 float moe_weight = topk_weights_ptr[weight_index];
                 for (int n = 0; n < BLOCK_SIZE_N; ++n) {
                     accumulator[m][n] *= moe_weight;
@@ -164,7 +164,7 @@ __global__ void fused_moe_kernel(
     for (int m = 0; m < BLOCK_SIZE_M; ++m) {
         if (token_mask[m]) {
             for (int n = 0; n < BLOCK_SIZE_N; ++n) {
-                int c_index = (stride_cm * sorted_token_ids_ptr[OFFSET_TOKEN_ID(m)]) + (stride_cn * (pid_n * BLOCK_SIZE_N + n));
+                int c_index = (stride_cm * sorted_token_ids[OFFSET_TOKEN_ID(m)]) + (stride_cn * (pid_n * BLOCK_SIZE_N + n));
                 if (pid_n * BLOCK_SIZE_N + n < N) {
                     c_ptr[c_index] = accumulator[m][n];
                 }

@@ -23,7 +23,7 @@ __global__ void fused_moe_kernel(
     const int EM,
     const int num_valid_tokens,
     // The stride variables represent how much to increase the ptr by when moving by 1
-    // element in a particular dimension. E.g. `stride_am` is how much to increase `a_ptr`
+    // element in a particular dimension. E.g. `stride_am` is how much to increase `a`
     // by to get the element one row down (A has M rows).
     const int stride_am,
     const int stride_ak,
@@ -81,7 +81,7 @@ __global__ void fused_moe_kernel(
     for (int m = 0; m < BLOCK_SIZE_M; ++m) {
         for (int k = 0; k < BLOCK_SIZE_K; ++k) {
             int offs_token = sorted_token_ids[OFFSET_TOKEN_ID(m)];
-            a_ptrs[m][k] = a_ptr + (offs_token / top_k * stride_am) + (k * stride_ak);
+            a_ptrs[m][k] = a + (offs_token / top_k * stride_am) + (k * stride_ak);
         }
     }
 
@@ -89,7 +89,7 @@ __global__ void fused_moe_kernel(
     float* b_ptrs[BLOCK_SIZE_K][BLOCK_SIZE_N];
     for (int k = 0; k < BLOCK_SIZE_K; ++k) {
         for (int n = 0; n < BLOCK_SIZE_N; ++n) {
-            b_ptrs[k][n] = b_ptr + off_experts + (k * stride_bk) + (OFFS_BN(n) * stride_bn);
+            b_ptrs[k][n] = b + off_experts + (k * stride_bk) + (OFFS_BN(n) * stride_bn);
         }
     }
 
@@ -166,7 +166,7 @@ __global__ void fused_moe_kernel(
             for (int n = 0; n < BLOCK_SIZE_N; ++n) {
                 int c_index = (stride_cm * sorted_token_ids[OFFSET_TOKEN_ID(m)]) + (stride_cn * (pid_n * BLOCK_SIZE_N + n));
                 if (pid_n * BLOCK_SIZE_N + n < N) {
-                    c_ptr[c_index] = accumulator[m][n];
+                    c[c_index] = accumulator[m][n];
                 }
             }
         }

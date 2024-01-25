@@ -193,12 +193,13 @@ void fused_moe(
     torch::Tensor expert_ids,
     torch::Tensor num_tokens_post_padded,
     bool MUL_ROUTED_WEIGHT,
-    int top_k) {
+    int top_k,
+    int parallelism) {
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     // assert(num_experts <= NUM_MAX_EXPERTS);
     VLLM_DISPATCH_FLOATING_TYPES(
         A.scalar_type(), "fused_moe_kernel", [&] {
-        vllm::fused_moe_kernel<scalar_t><<<1, 10, 0, stream>>>(
+        vllm::fused_moe_kernel<scalar_t><<<1, parallelism, 0, stream>>>(
             A.data_ptr<scalar_t>(),
             B.data_ptr<scalar_t>(),
             C.data_ptr<scalar_t>(),

@@ -296,6 +296,9 @@ def fused_moe(hidden_states: torch.Tensor,
     return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
                      dim=1)
 
+def ceildiv(a, b):
+    return -(a // -b)
+
 def fused_moe_cuda(
         hidden_states: torch.Tensor,
         w1: torch.Tensor,
@@ -331,6 +334,9 @@ def fused_moe_cuda(
     sorted_token_ids, expert_ids, num_tokens_post_padded = alig_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
+    parallelism = ceildiv(sorted_token_ids.shape[0], config[
+        'BLOCK_SIZE_M']) * ceildiv(N, config['BLOCK_SIZE_N'])
+
     ops.fused_moe(
         hidden_states,
         w1,
@@ -341,10 +347,14 @@ def fused_moe_cuda(
         expert_ids,
         num_tokens_post_padded,
         False,
-        topk_ids.shape[1]
+        topk_ids.shape[1],
+        parallelism
     )
 
     ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
+
+    parallelism = ceildiv(sorted_token_ids.shape[0], config[
+        'BLOCK_SIZE_M']) * ceildiv(w2.shape[1], config['BLOCK_SIZE_N'])
 
     ops.fused_moe(
         intermediate_cache2,
@@ -356,7 +366,8 @@ def fused_moe_cuda(
         expert_ids,
         num_tokens_post_padded,
         True,
-        1
+        1,
+        parallelism
     )
 
     if inplace:

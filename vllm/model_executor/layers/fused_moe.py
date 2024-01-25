@@ -336,11 +336,12 @@ def fused_moe_cuda(
         w1,
         intermediate_cache1,
         topk_weights,
+        topk_ids,
         sorted_token_ids,
         expert_ids,
         num_tokens_post_padded,
         False,
-        1
+        topk_ids.shape[1]
     )
 
     ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
@@ -350,6 +351,7 @@ def fused_moe_cuda(
         w2,
         intermediate_cache3,
         topk_weights,
+        topk_ids,
         sorted_token_ids,
         expert_ids,
         num_tokens_post_padded,

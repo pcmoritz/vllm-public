@@ -10,7 +10,7 @@
 #define GROUP_SIZE_M 8
 
 #define OFFSET_TOKEN_ID(i) (pid_m * BLOCK_SIZE_M + (i))
-#define OFFS_BN(i) ((pid_n * BLOCK_SIZE_N + i) % N)
+#define OFFS_BN(i) ((pid_n * BLOCK_SIZE_N + (i)) % N)
 
 namespace vllm {
 
@@ -93,11 +93,10 @@ __global__ void fused_moe_kernel(
         }
     }
 
-    int off_experts = expert_ids[pid_m] * stride_be;
     scalar_t* b_ptrs[BLOCK_SIZE_K][BLOCK_SIZE_N];
     for (int k = 0; k < BLOCK_SIZE_K; ++k) {
         for (int n = 0; n < BLOCK_SIZE_N; ++n) {
-            b_ptrs[k][n] = b_ptr + off_experts + (k * stride_bk) + (OFFS_BN(n) * stride_bn);
+            b_ptrs[k][n] = b_ptr + expert_ids[pid_m] * stride_be + k * stride_bk + OFFS_BN(n) * stride_bn;
         }
     }
 

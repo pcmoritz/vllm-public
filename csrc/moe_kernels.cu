@@ -16,9 +16,9 @@ namespace vllm {
 
 template<typename scalar_t>
 __global__ void fused_moe_kernel(
-    scalar_t *a,
-    scalar_t *b,
-    scalar_t *c,
+    scalar_t *a_ptr,
+    scalar_t *b_ptr,
+    scalar_t *c_ptr,
     scalar_t *topk_weights,
     int32_t *sorted_token_ids,
     int32_t *expert_ids,
@@ -89,7 +89,7 @@ __global__ void fused_moe_kernel(
     for (int m = 0; m < BLOCK_SIZE_M; ++m) {
         for (int k = 0; k < BLOCK_SIZE_K; ++k) {
             int offs_token = sorted_token_ids[OFFSET_TOKEN_ID(m)];
-            a_ptrs[m][k] = a + (offs_token / top_k * stride_am) + (k * stride_ak);
+            a_ptrs[m][k] = a_ptr + (offs_token / top_k * stride_am) + (k * stride_ak);
         }
     }
 
@@ -97,7 +97,7 @@ __global__ void fused_moe_kernel(
     scalar_t* b_ptrs[BLOCK_SIZE_K][BLOCK_SIZE_N];
     for (int k = 0; k < BLOCK_SIZE_K; ++k) {
         for (int n = 0; n < BLOCK_SIZE_N; ++n) {
-            b_ptrs[k][n] = b + off_experts + (k * stride_bk) + (OFFS_BN(n) * stride_bn);
+            b_ptrs[k][n] = b_ptr + off_experts + (k * stride_bk) + (OFFS_BN(n) * stride_bn);
         }
     }
 
@@ -174,7 +174,7 @@ __global__ void fused_moe_kernel(
             for (int n = 0; n < BLOCK_SIZE_N; ++n) {
                 int c_index = (stride_cm * sorted_token_ids[OFFSET_TOKEN_ID(m)]) + (stride_cn * (pid_n * BLOCK_SIZE_N + n));
                 if (pid_n * BLOCK_SIZE_N + n < N) {
-                    c[c_index] = accumulator[m][n];
+                    c_ptr[c_index] = accumulator[m][n];
                 }
             }
         }

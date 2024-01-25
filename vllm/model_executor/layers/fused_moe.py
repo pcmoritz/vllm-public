@@ -295,3 +295,71 @@ def fused_moe(hidden_states: torch.Tensor,
                          out=hidden_states)
     return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
                      dim=1)
+
+def fused_moe_cuda(
+        hidden_states: torch.Tensor,
+        w1: torch.Tensor,
+        w2: torch.Tensor,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        inplace=False):
+    # Check constraints.
+    assert hidden_states.shape[1] == w1.shape[2], "Incompatible dimensions"
+    assert hidden_states.is_contiguous(), "Matrix A must be contiguous"
+    assert w1.is_contiguous(), "Matrix B must be contiguous"
+    assert hidden_states.dtype in [torch.float16, torch.bfloat16]
+    M, K = hidden_states.shape
+    E, N, K = w1.shape
+
+    config = {
+        'BLOCK_SIZE_M': 64,
+        'BLOCK_SIZE_N': 64,
+        'BLOCK_SIZE_K': 32,
+        'GROUP_SIZE_M': 8
+    }
+
+    intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
+                                      device=hidden_states.device,
+                                      dtype=hidden_states.dtype)
+    intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
+                                      device=hidden_states.device,
+                                      dtype=hidden_states.dtype)
+    intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
+                                      device=hidden_states.device,
+                                      dtype=hidden_states.dtype)
+
+    sorted_token_ids, expert_ids, num_tokens_post_padded = alig_block_size(
+        topk_ids, config['BLOCK_SIZE_M'], E)
+
+    ops.fused_moe(
+        hidden_states,
+        w1,
+        intermediate_cache1,
+        topk_weights,
+        sorted_token_ids,
+        expert_ids,
+        num_tokens_post_padded,
+        False,
+        1
+    )
+
+    ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
+
+    ops.fused_moe(
+        intermediate_cache2,
+        w2,
+        intermediate_cache3,
+        topk_weights,
+        sorted_token_ids,
+        expert_ids,
+        num_tokens_post_padded,
+        True,
+        1
+    )
+
+    if inplace:
+        return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
+                         dim=1,
+                         out=hidden_states)
+    return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
+                     dim=1)

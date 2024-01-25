@@ -108,7 +108,7 @@ __global__ void fused_moe_kernel(
     // `accumulator` will be converted back to fp16 after the loop.
 
     // Initialize the accumulator
-    __shared__ scalar_t accumulator[BLOCK_SIZE_M][BLOCK_SIZE_N] = {0};
+    scalar_t accumulator[BLOCK_SIZE_M][BLOCK_SIZE_N] = {0};
 
     // Loop over K dimension in blocks
     for (int k = 0; k < (K + BLOCK_SIZE_K - 1) / BLOCK_SIZE_K; ++k) {
@@ -155,8 +155,6 @@ __global__ void fused_moe_kernel(
         }
     }
 
-    __syncthreads();
-
     // Conditional loading of weights and multiplication
     if (MUL_ROUTED_WEIGHT) {
         for (int m = 0; m < BLOCK_SIZE_M; ++m) {
@@ -169,8 +167,6 @@ __global__ void fused_moe_kernel(
             }
         }
     }
-
-    __syncthreads();
 
     // Write back the block of the output
     for (int m = 0; m < BLOCK_SIZE_M; ++m) {

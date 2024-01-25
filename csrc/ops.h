@@ -105,6 +105,9 @@ void fused_moe(
   torch::Tensor C,
   torch::Tensor topk_weights,
   torch::Tensor topk_ids,
+  torch::Tensor sorted_token_ids,
+  torch::Tensor expert_ids,
+  torch::Tensor num_tokens_post_padded,
   bool MUL_ROUTED_WEIGHT,
   int top_k
 );

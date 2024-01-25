@@ -44,7 +44,7 @@ __global__ void fused_moe_kernel(
     const int top_k
 ) {
     // Calculate the global thread ID
-    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    int pid = threadIdx.x;
 
     // Compute the number of PIDs in the M and N dimensions
     int num_pid_m = (EM + BLOCK_SIZE_M - 1) / BLOCK_SIZE_M;

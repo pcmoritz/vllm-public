@@ -112,13 +112,13 @@ __global__ void fused_moe_kernel(
         for (int m = 0; m < BLOCK_SIZE_M; ++m) {
             for (int kk = 0; kk < BLOCK_SIZE_K; ++kk) {
                 bool mask = token_mask[m] && kk < K - k * BLOCK_SIZE_K;
-                a[m][kk] = mask ? *(a_ptrs[m][kk]) : 0.0;
+                a[m][kk] = mask ? *(a_ptrs[m][kk]) : scalar_t(0.0);
             }
         }
         for (int kk = 0; kk < BLOCK_SIZE_K; ++kk) {
             for (int n = 0; n < BLOCK_SIZE_N; ++n) {
                 bool mask = kk < K - k * BLOCK_SIZE_K;
-                b[kk][n] = mask ? *(b_ptrs[kk][n]) : 0.0;
+                b[kk][n] = mask ? *(b_ptrs[kk][n]) : scalar_t(0.0);
             }
         }
 

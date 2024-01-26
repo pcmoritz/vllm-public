@@ -3,7 +3,6 @@
 
 #include "dispatch_utils.h"
 
-
 #define BLOCK_SIZE_M 64
 #define BLOCK_SIZE_N 64
 #define BLOCK_SIZE_K 32
@@ -11,6 +10,7 @@
 
 #define OFFSET_TOKEN_ID(i) (pid_m * BLOCK_SIZE_M + (i))
 #define OFFS_BN(i) ((pid_n * BLOCK_SIZE_N + (i)) % N)
+#define CEILDIV(x,y) (((x) + (y) - 1) / (y))
 
 namespace vllm {
 
@@ -47,8 +47,8 @@ __global__ void fused_moe_kernel(
     int pid = threadIdx.x;
 
     // Compute the number of PIDs in the M and N dimensions
-    int num_pid_m = (EM + BLOCK_SIZE_M - 1) / BLOCK_SIZE_M;
-    int num_pid_n = (N + BLOCK_SIZE_N - 1) / BLOCK_SIZE_N;
+    int num_pid_m = CEILDIV(EM, BLOCK_SIZE_M);
+    int num_pid_n = CEILDIV(N, BLOCK_SIZE_N);
 
     // Compute the number of PIDs in a group
     int num_pid_in_group = GROUP_SIZE_M * num_pid_n;
@@ -57,7 +57,7 @@ __global__ void fused_moe_kernel(
     int group_id = pid / num_pid_in_group;
     int first_pid_m = group_id * GROUP_SIZE_M;
 
-    // Calculate the size of the group in M dimension
+    // Calculate the size of the current group
     int group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M);
 
     // Calculate the PID in the M and N dimensions
@@ -71,28 +71,22 @@ __global__ void fused_moe_kernel(
     // `a_ptrs` is a block of [BLOCK_SIZE_M, BLOCK_SIZE_K] pointers
     // `b_ptrs` is a block of [BLOCK_SIZE_K, BLOCK_SIZE_N] pointers
 
-       // Load number of tokens post padded
+    // Load number of tokens post padded
     int num_tokens_post_padded = *total_tokens_post_pad;
     if (pid_m * BLOCK_SIZE_M >= num_tokens_post_padded) {
         return;
     }
 
-    // Load sorted token ids and create token mask
-    bool token_mask[BLOCK_SIZE_M];
-    for (int i = 0; i < BLOCK_SIZE_M; ++i) {
-        int offs_token = sorted_token_ids[OFFSET_TOKEN_ID(i)];
-        token_mask[i] = offs_token < num_valid_tokens;
-    }
-
-    // Calculate pointers for A and B matrices
+    // Calculate pointers for A and B matrices and create token mask
     scalar_t* a_ptrs[BLOCK_SIZE_M][BLOCK_SIZE_K];
+    bool token_mask[BLOCK_SIZE_M];
     for (int m = 0; m < BLOCK_SIZE_M; ++m) {
+        int offs_token = sorted_token_ids[OFFSET_TOKEN_ID(m)];
+        token_mask[m] = offs_token < num_valid_tokens;
         for (int k = 0; k < BLOCK_SIZE_K; ++k) {
-            int offs_token = sorted_token_ids[OFFSET_TOKEN_ID(m)];
-            a_ptrs[m][k] = a_ptr + (offs_token / top_k * stride_am) + (k * stride_ak);
+            a_ptrs[m][k] = a_ptr + (offs_token / top_k) * stride_am + k * stride_ak;
         }
     }
-
     scalar_t* b_ptrs[BLOCK_SIZE_K][BLOCK_SIZE_N];
     for (int k = 0; k < BLOCK_SIZE_K; ++k) {
         for (int n = 0; n < BLOCK_SIZE_N; ++n) {
@@ -110,23 +104,21 @@ __global__ void fused_moe_kernel(
     scalar_t accumulator[BLOCK_SIZE_M][BLOCK_SIZE_N] = {0};
 
     // Loop over K dimension in blocks
-    for (int k = 0; k < (K + BLOCK_SIZE_K - 1) / BLOCK_SIZE_K; ++k) {
+    for (int k = 0; k < CEILDIV(K, BLOCK_SIZE_K); ++k) {
         float a[BLOCK_SIZE_M][BLOCK_SIZE_K] = {0};
         float b[BLOCK_SIZE_K][BLOCK_SIZE_N] = {0};
 
         // Load the next block of A and B
         for (int m = 0; m < BLOCK_SIZE_M; ++m) {
             for (int kk = 0; kk < BLOCK_SIZE_K; ++kk) {
-                if (token_mask[m] && kk < K - k * BLOCK_SIZE_K) {
-                    a[m][kk] = *(a_ptrs[m][kk]);
-                }
+                bool mask = token_mask[m] && kk < K - k * BLOCK_SIZE_K;
+                a[m][kk] = mask ? *(a_ptrs[m][kk]) : 0.0;
             }
         }
         for (int kk = 0; kk < BLOCK_SIZE_K; ++kk) {
             for (int n = 0; n < BLOCK_SIZE_N; ++n) {
-                if (kk < K - k * BLOCK_SIZE_K) {
-                    b[kk][n] = *(b_ptrs[kk][n]);
-                }
+                bool mask = kk < K - k * BLOCK_SIZE_K;
+                b[kk][n] = mask ? *(b_ptrs[kk][n]) : 0.0;
             }
         }
 

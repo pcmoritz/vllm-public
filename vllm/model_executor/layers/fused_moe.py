@@ -334,14 +334,22 @@ def fused_moe_cuda(
     sorted_token_ids, expert_ids, num_tokens_post_padded = alig_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
+    permutation = torch.zeros(M * topk_ids.shape[1], device=hidden_states.device, dtype=torch.int32)
+    batch_sizes = torch.tensor([M//4, M//4, M//4, M//4, M//4, M//4, M//4, M//4], dtype=torch.int64)
+
+    intermediate_cache0 = hidden_states[permutation,:]
+
     parallelism = ceildiv(sorted_token_ids.shape[0], config[
         'BLOCK_SIZE_M']) * ceildiv(N, config['BLOCK_SIZE_N'])
 
     ops.fused_moe(
-        hidden_states,
+        intermediate_cache0,
+        # hidden_states,
         w1,
         intermediate_cache1,
-        topk_weights,
+        # topk_weights,
+        batch_sizes,
+        #
         topk_ids,
         sorted_token_ids,
         expert_ids,
@@ -360,7 +368,9 @@ def fused_moe_cuda(
         intermediate_cache2,
         w2,
         intermediate_cache3,
-        topk_weights,
+        # topk_weights,
+        batch_sizes,
+        # 
         topk_ids,
         sorted_token_ids,
         expert_ids,

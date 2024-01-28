@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 from vllm.model_executor.layers.linear import ReplicatedLinear
-from vllm.model_executor.layers.fused_moe import fused_moe
+from vllm.model_executor.layers.fused_moe import fused_moe, fused_moe_cuda
 from vllm.model_executor.parallel_utils.communication_op import (
     tensor_model_parallel_all_reduce)
 from vllm.model_executor.parallel_utils.parallel_state import (
@@ -74,7 +74,7 @@ class MoE(nn.Module):
     def fused_moe_infer(self, hidden_states: torch.Tensor,
                         selected_experts: torch.Tensor,
                         routing_weights: torch.Tensor) -> torch.Tensor:
-        return fused_moe(hidden_states,
+        return fused_moe_cuda(hidden_states,
                          self.ws,
                          self.w2s,
                          routing_weights,

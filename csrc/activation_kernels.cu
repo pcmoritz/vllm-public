@@ -20,8 +20,8 @@ __global__ void silu_and_mul_kernel(
   const int d) {
   const int64_t token_idx = blockIdx.x;
   for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-    const scalar_t x = input[token_idx * 2 * d + idx];
-    const scalar_t y = input[token_idx * 2 * d + d + idx];
+    const scalar_t x = VLLM_LDG(&input[token_idx * 2 * d + idx]);
+    const scalar_t y = VLLM_LDG(&input[token_idx * 2 * d + d + idx]);
     out[token_idx * d + idx] = silu(x) * y;
   }
 }
@@ -39,7 +39,7 @@ void silu_and_mul(
   dim3 block(std::min(d, 1024));
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  VLLM_DISPATCH_FLOATING_TYPES_FP8(
+  VLLM_DISPATCH_FLOATING_TYPES(
     input.scalar_type(),
     "silu_and_mul_kernel",
     [&] {

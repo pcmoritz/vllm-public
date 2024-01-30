@@ -9,7 +9,8 @@
 #define VLLM_DISPATCH_CASE_FLOATING_TYPES(...)              \
   AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__)      \
   AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)       \
-  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)
+  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)   \
+  AT_DISPATCH_CASE(at::ScalarType::Float8_e4m3fn)
 
 #define VLLM_DISPATCH_FLOATING_TYPES(TYPE, NAME, ...)             \
   AT_DISPATCH_SWITCH(                                             \

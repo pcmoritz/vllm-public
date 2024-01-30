@@ -39,7 +39,7 @@ void silu_and_mul(
   dim3 block(std::min(d, 1024));
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  VLLM_DISPATCH_FLOATING_TYPES(
+  VLLM_DISPATCH_FLOATING_TYPES_FP8(
     input.scalar_type(),
     "silu_and_mul_kernel",
     [&] {

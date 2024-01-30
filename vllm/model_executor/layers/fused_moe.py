@@ -280,7 +280,7 @@ def fused_moe(hidden_states: torch.Tensor,
                             config)
 
     if inplace:
-        return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
+        return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape).to(dtype=torch.bfloat16),
                          dim=1,
                          out=hidden_states)
     return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),

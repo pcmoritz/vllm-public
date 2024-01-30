@@ -138,7 +138,7 @@ class MixtralMoE(nn.Module):
                                         self.w2s,
                                         routing_weights,
                                         selected_experts,
-                                        inplace=True).to(dtype=torch.bfloat16)
+                                        inplace=True)
 
         final_hidden_states = tensor_model_parallel_all_reduce(
             final_hidden_states)

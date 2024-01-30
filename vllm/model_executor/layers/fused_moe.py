@@ -279,8 +279,10 @@ def fused_moe(hidden_states: torch.Tensor,
                             expert_ids, num_tokens_post_padded, True, 1,
                             config)
 
+    intermediate_cache3 = intermediate_cache3.to(dtype=torch.bfloat16)
+
     if inplace:
-        return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape).to(dtype=torch.bfloat16),
+        return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
                          dim=1,
                          out=hidden_states)
     return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),

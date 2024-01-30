@@ -205,7 +205,7 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
         C.stride(2),
         MUL_ROUTED_WEIGHT=mul_routed_weight,
         top_k=top_k,
-        compute_type=tl.fp8e4nv,
+        compute_type=tl.float8e4nv,
         **config,
     )
 

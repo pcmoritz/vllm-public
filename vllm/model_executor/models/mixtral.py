@@ -133,7 +133,7 @@ class MixtralMoE(nn.Module):
                                                        dim=-1)
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
 
-        final_hidden_states = fused_moe(hidden_states.to(dtype=torch.float8_e4m3fn),
+        final_hidden_states = fused_moe(hidden_states,
                                         self.ws,
                                         self.w2s,
                                         routing_weights,

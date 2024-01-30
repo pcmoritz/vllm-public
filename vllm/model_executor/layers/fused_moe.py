@@ -263,6 +263,9 @@ def fused_moe(hidden_states: torch.Tensor,
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
+    intermediate_cache4 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
+                                      device=hidden_states.device,
+                                      dtype=torch.bfloat16)
 
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
@@ -279,11 +282,11 @@ def fused_moe(hidden_states: torch.Tensor,
                             expert_ids, num_tokens_post_padded, True, 1,
                             config)
 
-    intermediate_cache3 = intermediate_cache3.to(dtype=torch.bfloat16)
+    intermediate_cache4.copy_(intermediate_cache3)
 
     if inplace:
-        return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
+        return torch.sum(intermediate_cache4.view(*intermediate_cache4.shape),
                          dim=1,
                          out=hidden_states)
-    return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
+    return torch.sum(intermediate_cache4.view(*intermediate_cache4.shape),
                      dim=1)

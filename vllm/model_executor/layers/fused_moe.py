@@ -100,10 +100,10 @@ def fused_moe_kernel(
         a = tl.load(a_ptrs,
                     mask=token_mask[:, None] &
                     (offs_k[None, :] < K - k * BLOCK_SIZE_K),
-                    other=0.0)
+                    other=0.0).to(compute_type)
         b = tl.load(b_ptrs,
                     mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
-                    other=0.0)
+                    other=0.0).to(compute_type)
         # We accumulate along the K dimension.
         accumulator += tl.dot(a, b)
         # Advance the ptrs to the next K block.

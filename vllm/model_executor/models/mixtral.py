@@ -85,7 +85,6 @@ class MixtralMoE(nn.Module):
         self.gate = ReplicatedLinear(self.hidden_size,
                                      self.num_total_experts,
                                      bias=False,
-                                     params_dtype=self.params_dtype,
                                      linear_method=None)
 
         self.ws = nn.Parameter(
@@ -245,17 +244,12 @@ class MixtralDecoderLayer(nn.Module):
             rope_theta=rope_theta,
             sliding_window=config.sliding_window,
             linear_method=linear_method)
-        if config.task_specific_params.get("moe_dtype") == "fp8_e4m3":
-            moe_dtype = torch.float8_e4m3fn
-        else:
-            assert "moe_dtype" not in config.task_specific_params
-            moe_dtype = None
         self.block_sparse_moe = MixtralMoE(
             num_experts=config.num_local_experts,
             top_k=config.num_experts_per_tok,
             hidden_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
-            params_dtype=moe_dtype,
+            params_dtype=torch.float8_e4m3fn,
         )
         self.input_layernorm = RMSNorm(config.hidden_size,
                                        eps=config.rms_norm_eps)

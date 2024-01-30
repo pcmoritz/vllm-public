@@ -214,8 +214,7 @@ def fused_moe(hidden_states: torch.Tensor,
               w1: torch.Tensor,
               w2: torch.Tensor,
               topk_weights: torch.Tensor,
-              topk_ids: torch.Tensor,
-              inplace=False):
+              topk_ids: torch.Tensor):
     """
     This function computes a Mixture of Experts (MoE) layer using two sets of weights, w1 and w2, and top-k gating mechanism.
     
@@ -284,9 +283,5 @@ def fused_moe(hidden_states: torch.Tensor,
 
     intermediate_cache4[:,:,:] = intermediate_cache3.to(torch.bfloat16)
 
-    if inplace:
-        return torch.sum(intermediate_cache4.view(*intermediate_cache4.shape),
-                         dim=1,
-                         out=hidden_states)
     return torch.sum(intermediate_cache4.view(*intermediate_cache4.shape),
                      dim=1)

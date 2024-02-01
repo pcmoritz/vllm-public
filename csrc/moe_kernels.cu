@@ -1,199 +1,178 @@
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
 
-//
-#include <iostream>
-
 #include "dispatch_utils.h"
 
-#include <c10/util/BFloat16.h>
-#include <c10/cuda/CUDAStream.h>
+#define BLOCK_SIZE_M 64
+#define BLOCK_SIZE_N 64
+#define BLOCK_SIZE_K 32
+#define GROUP_SIZE_M 8
 
-#include "cutlass/platform/platform.h"
-#include "cutlass/bfloat16.h"
-#include "cutlass/complex.h"
-#include "cutlass/gemm/kernel/gemm_grouped.h"
-#include "cutlass/gemm/kernel/default_gemm_grouped.h"
-#include "cutlass/gemm/device/gemm_grouped.h"
+#define OFFSET_TOKEN_ID(i) (pid_m * BLOCK_SIZE_M + (i))
+#define OFFS_BN(i) ((pid_n * BLOCK_SIZE_N + (i)) % N)
+#define CEILDIV(x,y) (((x) + (y) - 1) / (y))
 
 namespace vllm {
 
-#define CUDA_CALL(code)					                    \
-  do {                                                      \
-    cudaError_t status = code;                              \
-    std::string err = cudaGetErrorString(status);           \
-    TORCH_CHECK(status == cudaSuccess, err);		        \
-  } while (0)
+template<typename scalar_t>
+__global__ void fused_moe_kernel(
+    scalar_t *a_ptr,
+    scalar_t *b_ptr,
+    scalar_t *c_ptr,
+    scalar_t *topk_weights,
+    int32_t *sorted_token_ids,
+    int32_t *expert_ids,
+    int32_t *total_tokens_post_pad,
+    const int M,
+    const int N,
+    const int K,
+    const int EM,
+    const int num_valid_tokens,
+    // The stride variables represent how much to increase the ptr by when moving by 1
+    // element in a particular dimension. E.g. `stride_am` is how much to increase `a`
+    // by to get the element one row down (A has M rows).
+    const int stride_am,
+    const int stride_ak,
+    const int stride_be,
+    const int stride_bk,
+    const int stride_bn,
+    const int stride_cm,
+    const int stride_cn,
+    const int stride_weight,
+    const int stride_token_id,
+    const bool MUL_ROUTED_WEIGHT,
+    const int top_k
+) {
+    // Calculate the global thread ID
+    int pid = threadIdx.x;
 
-#define GROUPED_GEMM_STRINGIFY_HELPER(x) #x
-#define GROUPED_GEMM_STRINGIFY(x) \
-  GROUPED_GEMM_STRINGIFY_HELPER(x)
+    // Compute the number of PIDs in the M and N dimensions
+    int num_pid_m = CEILDIV(EM, BLOCK_SIZE_M);
+    int num_pid_n = CEILDIV(N, BLOCK_SIZE_N);
 
-using DefaultConfig = ::cutlass::gemm::device::DefaultGemmConfiguration<::cutlass::arch::OpClassTensorOp, ::cutlass::arch::Sm80, ::cutlass::bfloat16_t, ::cutlass::bfloat16_t, ::cutlass::bfloat16_t, float>;
+    // Compute the number of PIDs in a group
+    int num_pid_in_group = GROUP_SIZE_M * num_pid_n;
 
+    // Calculate the group ID and the first PID in M dimension for this group
+    int group_id = pid / num_pid_in_group;
+    int first_pid_m = group_id * GROUP_SIZE_M;
 
-// TODO(tgale): Update this for SM90 when it's supported by CUTLASS.
-using GroupedGemmKernelNN = typename cutlass::gemm::kernel::DefaultGemmGrouped<
-  // Non-transposed A operand.
-  ::cutlass::bfloat16_t,
-  ::cutlass::layout::RowMajor,
-  ::cutlass::ComplexTransform::kNone,
-  8,
-  // Non-transposed B operand.
-  ::cutlass::bfloat16_t,
-  ::cutlass::layout::RowMajor,
-  ::cutlass::ComplexTransform::kNone,
-  8,
-  // C operand.
-  ::cutlass::bfloat16_t,
-  ::cutlass::layout::RowMajor,
-  float,
-  ::cutlass::arch::OpClassTensorOp,
-  ::cutlass::arch::Sm80,
-  ::cutlass::gemm::GemmShape<32, 128, 64>,
-  ::cutlass::gemm::GemmShape<32, 32, 64>,
-  ::cutlass::gemm::GemmShape<16, 8, 16>,
-  // DefaultConfig::ThreadblockShape,
-  // DefaultConfig::WarpShape,
-  // DefaultConfig::InstructionShape,
-  // ::cutlass::epilogue::thread::LinearCombination<::cutlass::bfloat16_t, 8, float, float>,
-  DefaultConfig::EpilogueOutputOp,
-  // NOTE: Threadblock swizzling is currently not supported by CUTLASS's grouped kernels.
-  // This parameter is passed in at present to match the APIs of other kernels. The parameter
-  // is unused within the kernel.
-  ::cutlass::gemm::threadblock::GemmBatchedIdentityThreadblockSwizzle,
-  // TODO(tgale): Experiment with GroupScheduleMode.
-  // TODO(tgale): Tune this for SM90.
-  DefaultConfig::kStages>::GemmKernel;
-using GemmGroupedNN = ::cutlass::gemm::device::GemmGrouped<GroupedGemmKernelNN>;
+    // Calculate the size of the current group
+    int group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M);
 
-std::vector<cutlass::gemm::GemmCoord> MakeProblemSizes(torch::Tensor b, torch::Tensor batch_sizes) {
-  const size_t num_experts = batch_sizes.size(0);
-  const size_t k = b.size(1), n = b.size(2);
-  std::vector<cutlass::gemm::GemmCoord> problem_sizes(num_experts);
-  for (int i = 0; i < num_experts; ++i) {
-    int64_t batch_size = batch_sizes.data_ptr<int64_t>()[i];
-    problem_sizes[i] = cutlass::gemm::GemmCoord(batch_size, n, k);
-  }
-  return problem_sizes;
+    // Calculate the PID in the M and N dimensions
+    int pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size_m);
+    int pid_n = (pid % num_pid_in_group) / group_size_m;
+
+    // ----------------------------------------------------------
+    // Create pointers for the first blocks of A and B.
+    // We will advance this pointer as we move in the K direction
+    // and accumulate
+    // `a_ptrs` is a block of [BLOCK_SIZE_M, BLOCK_SIZE_K] pointers
+    // `b_ptrs` is a block of [BLOCK_SIZE_K, BLOCK_SIZE_N] pointers
+
+    // Load number of tokens post padded
+    int num_tokens_post_padded = *total_tokens_post_pad;
+    if (pid_m * BLOCK_SIZE_M >= num_tokens_post_padded) {
+        return;
+    }
+
+    // Calculate pointers for A and B matrices and create token mask
+    scalar_t* a_ptrs[BLOCK_SIZE_M][BLOCK_SIZE_K];
+    bool token_mask[BLOCK_SIZE_M];
+    for (int m = 0; m < BLOCK_SIZE_M; ++m) {
+        int offs_token = sorted_token_ids[OFFSET_TOKEN_ID(m)];
+        token_mask[m] = offs_token < num_valid_tokens;
+        for (int k = 0; k < BLOCK_SIZE_K; ++k) {
+            a_ptrs[m][k] = a_ptr + (offs_token / top_k) * stride_am + k * stride_ak;
+        }
+    }
+    scalar_t* b_ptrs[BLOCK_SIZE_K][BLOCK_SIZE_N];
+    for (int k = 0; k < BLOCK_SIZE_K; ++k) {
+        for (int n = 0; n < BLOCK_SIZE_N; ++n) {
+            b_ptrs[k][n] = b_ptr + expert_ids[pid_m] * stride_be + k * stride_bk + OFFS_BN(n) * stride_bn;
+        }
+    }
+
+    // -----------------------------------------------------------
+    // Iterate to compute a block of the C matrix.
+    // We accumulate into a `[BLOCK_SIZE_M, BLOCK_SIZE_N]` block
+    // of fp32 values for higher accuracy.
+    // `accumulator` will be converted back to fp16 after the loop.
+
+    // Initialize the accumulator
+    scalar_t accumulator[BLOCK_SIZE_M][BLOCK_SIZE_N] = {0};
+
+    // Loop over K dimension in blocks
+    for (int k = 0; k < CEILDIV(K, BLOCK_SIZE_K); ++k) {
+        float a[BLOCK_SIZE_M][BLOCK_SIZE_K] = {0};
+        float b[BLOCK_SIZE_K][BLOCK_SIZE_N] = {0};
+
+        // Load the next block of A and B
+        for (int m = 0; m < BLOCK_SIZE_M; ++m) {
+            for (int kk = 0; kk < BLOCK_SIZE_K; ++kk) {
+                bool mask = token_mask[m] && kk < K - k * BLOCK_SIZE_K;
+                a[m][kk] = mask ? *(a_ptrs[m][kk]) : scalar_t(0.0);
+            }
+        }
+        for (int kk = 0; kk < BLOCK_SIZE_K; ++kk) {
+            for (int n = 0; n < BLOCK_SIZE_N; ++n) {
+                bool mask = kk < K - k * BLOCK_SIZE_K;
+                b[kk][n] = mask ? *(b_ptrs[kk][n]) : scalar_t(0.0);
+            }
+        }
+
+        // Dot product and accumulate
+        for (int m = 0; m < BLOCK_SIZE_M; ++m) {
+            for (int n = 0; n < BLOCK_SIZE_N; ++n) {
+                float sum = 0;
+                for (int kk = 0; kk < BLOCK_SIZE_K; ++kk) {
+                    sum += a[m][kk] * b[kk][n];
+                }
+                accumulator[m][n] += sum;
+            }
+        }
+
+        // Advance the pointers to the next K block
+        for (int m = 0; m < BLOCK_SIZE_M; ++m) {
+            for (int kk = 0; kk < BLOCK_SIZE_K; ++kk) {
+                a_ptrs[m][kk] += BLOCK_SIZE_K * stride_ak;
+            }
+        }
+        for (int kk = 0; kk < BLOCK_SIZE_K; ++kk) {
+            for (int n = 0; n < BLOCK_SIZE_N; ++n) {
+                b_ptrs[kk][n] += BLOCK_SIZE_K * stride_bk;
+            }
+        }
+    }
+
+    // Conditional loading of weights and multiplication
+    if (MUL_ROUTED_WEIGHT) {
+        for (int m = 0; m < BLOCK_SIZE_M; ++m) {
+            if (token_mask[m]) {
+                int weight_index = sorted_token_ids[OFFSET_TOKEN_ID(m)] * stride_weight;
+                float moe_weight = topk_weights[weight_index];
+                for (int n = 0; n < BLOCK_SIZE_N; ++n) {
+                    accumulator[m][n] *= moe_weight;
+                }
+            }
+        }
+    }
+
+    // Write back the block of the output
+    for (int m = 0; m < BLOCK_SIZE_M; ++m) {
+        if (token_mask[m]) {
+            for (int n = 0; n < BLOCK_SIZE_N; ++n) {
+                int c_index = (stride_cm * sorted_token_ids[OFFSET_TOKEN_ID(m)]) + (stride_cn * (pid_n * BLOCK_SIZE_N + n));
+                if (pid_n * BLOCK_SIZE_N + n < N) {
+                    c_ptr[c_index] = accumulator[m][n];
+                }
+            }
+        }
+    }
 }
 
-template <typename T>
-torch::Tensor CopyToDevice(const std::vector<T> &x, const torch::Device &device) {
-  size_t bytes = x.size() * sizeof(T);
-  auto options = torch::TensorOptions().dtype(torch::kInt8).device(device);
-  torch::Tensor out = torch::empty(bytes, options);
-
-  CUDA_CALL(cudaMemcpyAsync(out.data_ptr(),
-			    x.data(), bytes,
-			    cudaMemcpyHostToDevice,
-			    c10::cuda::getCurrentCUDAStream()));
-  return out;
-}
-
-template <typename Gemm>
-typename Gemm::Arguments MakeArguments(torch::Tensor a,
-				       torch::Tensor b,
-				       torch::Tensor c,
-				       torch::Tensor batch_sizes) {
-  auto problem_sizes_host = MakeProblemSizes(b, batch_sizes);
-
-  // Calculate the number of threadblocks to use and validate the result.
-  int64_t num_experts = problem_sizes_host.size();
-
-  // NOTE: This is borrowed from FasterTransformer.
-  int threadblock_count = Gemm::sufficient(problem_sizes_host.data(), num_experts);
-  if (!threadblock_count) {
-    TORCH_CHECK(false, "Grouped GEMM execution not possible with HW");
-  }
-
-  // Create the host arrays of leading dimension data and pointer data.
-  using LayoutA = typename Gemm::LayoutA;
-  using LayoutB = typename Gemm::LayoutB;
-  using LayoutC = typename Gemm::LayoutC;
-
-  std::vector<int64_t> lda_host(num_experts), offsets_a(num_experts);
-  std::vector<int64_t> ldb_host(num_experts), offsets_b(num_experts);
-  std::vector<int64_t> ldc_host(num_experts), offsets_c(num_experts);
-  int64_t elements_a = 0, elements_b = 0, elements_c = 0;
-
-  using ElementA = typename Gemm::ElementA;
-  using ElementB = typename Gemm::ElementB;
-  using ElementC = typename Gemm::ElementC;
-  std::vector<ElementA *> ptr_a_host(num_experts);
-  std::vector<ElementB *> ptr_b_host(num_experts);
-  std::vector<ElementC *> ptr_c_host(num_experts);
-
-  for (int i = 0; i < num_experts; ++i) {
-    auto problem = problem_sizes_host[i];
-    lda_host[i] = LayoutA::packed({problem.m(), problem.k()}).stride(0);
-    ldb_host[i] = LayoutB::packed({problem.k(), problem.n()}).stride(0);
-    ldc_host[i] = LayoutC::packed({problem.m(), problem.n()}).stride(0);
-
-    offsets_a[i] = elements_a;
-    offsets_b[i] = elements_b;
-    offsets_c[i] = elements_c;
-
-    ptr_a_host[i] = (ElementA*)a.data_ptr() + offsets_a[i];
-    ptr_b_host[i] = (ElementB*)b.data_ptr() + offsets_b[i];
-    ptr_c_host[i] = (ElementC*)c.data_ptr() + offsets_c[i];
-
-    elements_a += problem.m() * problem.k();
-    elements_b += problem.k() * problem.n();
-    elements_c += problem.m() * problem.n();
-  }
-
-  // Copy the problem sizes, pointers and leading dimension data to the device.
-  torch::Tensor lda = CopyToDevice(lda_host, a.device());
-  torch::Tensor ldb = CopyToDevice(ldb_host, a.device());
-  torch::Tensor ldc = CopyToDevice(ldc_host, a.device());
-  torch::Tensor ptr_a = CopyToDevice(ptr_a_host, a.device());
-  torch::Tensor ptr_b = CopyToDevice(ptr_b_host, a.device());
-  torch::Tensor ptr_c = CopyToDevice(ptr_c_host, a.device());
-  torch::Tensor problem_sizes = CopyToDevice(problem_sizes_host, a.device());
-
-  typename Gemm::EpilogueOutputOp::Params epilogue_op(/*alpha=*/1.0f, /*beta=*/0.0f);
-  typename Gemm::Arguments arguments((cutlass::gemm::GemmCoord*)problem_sizes.data_ptr(),
-  				     (int)num_experts,
-  				     (int)threadblock_count,
-  				     epilogue_op,
-  				     (ElementA**)ptr_a.data_ptr(),
-  				     (ElementB**)ptr_b.data_ptr(),
-  				     (ElementC**)ptr_c.data_ptr(),
-  				     (ElementC**)ptr_c.data_ptr(),
-  				     /*lda=*/(int64_t*)lda.data_ptr(),
-  				     /*ldb=*/(int64_t*)ldb.data_ptr(),
-  				     /*ldc=*/(int64_t*)ldc.data_ptr(),
-  				     /*ldd=*/(int64_t*)ldc.data_ptr(),
-  				     (cutlass::gemm::GemmCoord*)problem_sizes_host.data());
-  return arguments;
-}
-
-torch::Tensor CutlassGroupedGemm(torch::Tensor a,
-				 torch::Tensor b,
-				 torch::Tensor c,
-				 torch::Tensor batch_sizes) {
-  using Gemm = GemmGroupedNN;
-  Gemm gemm;
-
-  auto arguments = MakeArguments<Gemm>(a, b, c, batch_sizes);
-  int64_t workspace_size = gemm.get_workspace_size(arguments);
-  auto options = torch::TensorOptions().dtype(torch::kInt8).device(a.device());
-  torch::Tensor workspace = torch::empty(workspace_size, options);
-
-  // Initialize the kernel.
-  if(gemm.initialize(arguments, workspace.data_ptr()) != cutlass::Status::kSuccess) {
-    TORCH_CHECK(false, "Failed to initialize CUTLASS Grouped GEMM");
-  }
-
-  // Execute the kernel in the current stream.
-  if(gemm.run(c10::cuda::getCurrentCUDAStream()) != cutlass::Status::kSuccess) {
-    TORCH_CHECK(false, "Failed to run CUTLASS Grouped GEMM");
-  }
-  return c;
-}
-
-}
+} // namespace
 
 void fused_moe(
     torch::Tensor A,
@@ -208,6 +187,33 @@ void fused_moe(
     int top_k,
     int parallelism) {
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-    
-    vllm::CutlassGroupedGemm(A, B, C, topk_weights);
+    // assert(num_experts <= NUM_MAX_EXPERTS);
+    VLLM_DISPATCH_FLOATING_TYPES(
+        A.scalar_type(), "fused_moe_kernel", [&] {
+        vllm::fused_moe_kernel<scalar_t><<<1, parallelism, 0, stream>>>(
+            A.data_ptr<scalar_t>(),
+            B.data_ptr<scalar_t>(),
+            C.data_ptr<scalar_t>(),
+            topk_weights.data_ptr<scalar_t>(),
+            sorted_token_ids.data_ptr<int32_t>(),
+            expert_ids.data_ptr<int32_t>(),
+            num_tokens_post_padded.data_ptr<int32_t>(),
+            A.size(0),
+            B.size(1),
+            A.size(1),
+            sorted_token_ids.size(0),
+            topk_ids.numel(),
+            A.stride(0),
+            A.stride(1),
+            B.stride(0),
+            B.stride(2),
+            B.stride(1),
+            C.stride(1),
+            C.stride(2),
+            topk_weights.stride(1),
+            sorted_token_ids.stride(0),
+            MUL_ROUTED_WEIGHT,
+            top_k
+	);
+    });
 }

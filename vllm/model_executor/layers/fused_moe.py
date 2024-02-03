@@ -155,7 +155,7 @@ def moe_align_block_size(
     expert_ids = torch.empty((topk_ids.numel() + num_experts, ),
                              dtype=torch.int32,
                              device=topk_ids.device)
-    sorted_ids.fill_(0)
+    sorted_ids.fill_(topk_ids.numel())
     num_tokens_post_pad = torch.empty((1),
                                       dtype=torch.int32,
                                       device=topk_ids.device)

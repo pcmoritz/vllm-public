@@ -77,7 +77,6 @@ def fused_moe_kernel(
         return
     offs_token_id = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
     offs_token = tl.load(sorted_token_ids_ptr + offs_token_id)
-    token_mask = offs_token < num_valid_tokens
 
     offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
     offs_k = tl.arange(0, BLOCK_SIZE_K)
@@ -96,14 +95,9 @@ def fused_moe_kernel(
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
 
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        # Load the next block of A and B, generate a mask by checking the K dimension.
-        a = tl.load(a_ptrs,
-                    mask=token_mask[:, None] &
-                    (offs_k[None, :] < K - k * BLOCK_SIZE_K),
-                    other=0.0)
-        b = tl.load(b_ptrs,
-                    mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
-                    other=0.0)
+        # Load the next block of A and B.
+        a = tl.load(a_ptrs)
+        b = tl.load(b_ptrs)
         # We accumulate along the K dimension.
         accumulator += tl.dot(a, b)
         # Advance the ptrs to the next K block.
@@ -111,9 +105,7 @@ def fused_moe_kernel(
         b_ptrs += BLOCK_SIZE_K * stride_bk
 
     if MUL_ROUTED_WEIGHT:
-        moe_weight = tl.load(topk_weights_ptr + offs_token,
-                             mask=token_mask,
-                             other=0)
+        moe_weight = tl.load(topk_weights_ptr + offs_token)
         accumulator = accumulator * moe_weight[:, None]
 
     accumulator = accumulator.to(compute_type)
@@ -122,8 +114,7 @@ def fused_moe_kernel(
     offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
     c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
         None, :]
-    c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, accumulator, mask=c_mask)
+    tl.store(c_ptrs, accumulator)
 
 
 def moe_align_block_size(
@@ -162,7 +153,7 @@ def moe_align_block_size(
     expert_ids = torch.empty((topk_ids.numel() + num_experts, ),
                              dtype=torch.int32,
                              device=topk_ids.device)
-    sorted_ids.fill_(topk_ids.numel())
+    sorted_ids.fill_(0)
     num_tokens_post_pad = torch.empty((1),
                                       dtype=torch.int32,
                                       device=topk_ids.device)
@@ -238,7 +229,7 @@ def fused_moe(hidden_states: torch.Tensor,
     assert hidden_states.dtype in [
         torch.float32, torch.float16, torch.bfloat16
     ]
-    M, _ = hidden_states.shape
+    M, K = hidden_states.shape
     E, N, _ = w1.shape
 
     config = {
@@ -255,6 +246,9 @@ def fused_moe(hidden_states: torch.Tensor,
             'BLOCK_SIZE_K': 64,
             'GROUP_SIZE_M': 1
         }
+
+    assert K % config["BLOCK_SIZE_K"] == 0
+    assert N % config["BLOCK_SIZE_N"] == 0
 
     intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
                                       device=hidden_states.device,

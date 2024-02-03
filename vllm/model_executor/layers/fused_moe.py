@@ -117,9 +117,9 @@ def fused_moe_kernel(
         accumulator = accumulator * moe_weight[:, None]
 
     if FUSE_SILU:
-        x = accumulator[:,:BLOCK_SIZE_N//2]
-        y = accumulator[:,BLOCK_SIZE_N//2:]
-        accumulator[:, :BLOCK_SIZE_N//2] = x * tl.sigmoid(y)
+        x = accumulator[:,0:BLOCK_SIZE_N//2]
+        y = accumulator[:,BLOCK_SIZE_N//2:BLOCK_SIZE_N]
+        accumulator[:, 0:BLOCK_SIZE_N//2] = x * tl.sigmoid(y)
 
     accumulator = accumulator.to(compute_type)
 

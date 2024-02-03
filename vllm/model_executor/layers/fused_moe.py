@@ -8,7 +8,7 @@ from vllm._C import ops
 
 @triton.jit
 def silu(x):
-    return x / (1.0 + tl.expf(-x))
+    return x * tl.sigmoid(x.to(tl.float32)).to(x.dtype)
 
 @triton.jit
 def fused_moe_kernel(

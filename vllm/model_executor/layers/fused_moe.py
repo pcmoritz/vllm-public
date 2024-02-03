@@ -146,18 +146,18 @@ def fused_moe_kernel(
                         mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
                         other=0.0)
             acc1 += tl.dot(a, b1)
-            b2 = tl.load(b_ptrs2,
-                        mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
-                        other=0.0)
-            acc2 += tl.dot(a, b2)
+            # b2 = tl.load(b_ptrs2,
+            #             mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
+            #             other=0.0)
+            # acc2 += tl.dot(a, b2)
 
             # Advance the ptrs to the next K block.
             a_ptrs += BLOCK_SIZE_K * stride_ak
             b_ptrs1 += BLOCK_SIZE_K * stride_bk
-            b_ptrs2 += BLOCK_SIZE_K * stride_bk
+            # b_ptrs2 += BLOCK_SIZE_K * stride_bk
 
         acc1 = acc1.to(compute_type)
-        acc2 = acc2.to(compute_type)
+        # acc2 = acc2.to(compute_type)
 
         offs_cn = pid_n * BLOCK_SIZE_N//2 + tl.arange(0, BLOCK_SIZE_N//2)
 

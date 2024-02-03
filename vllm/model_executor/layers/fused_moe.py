@@ -127,13 +127,13 @@ def fused_moe_kernel(
 
     else:
         offs_bn1 = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N//2)) % N
-        offs_bn2 = (pid_n * BLOCK_SIZE_N + tl.arange(BLOCK_SIZE_N//2, BLOCK_SIZE_N)) % N
+        # offs_bn2 = (pid_n * BLOCK_SIZE_N + tl.arange(BLOCK_SIZE_N//2, BLOCK_SIZE_N)) % N
         b_ptrs1 = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
                                                      offs_bn1[None, :] * stride_bn)
-        b_ptrs2 = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
-                                                     offs_bn2[None, :] * stride_bn)
+        # b_ptrs2 = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
+        #                                              offs_bn2[None, :] * stride_bn)
         acc1 = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N//2), dtype=tl.float32)
-        acc2 = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N//2), dtype=tl.float32)
+        # acc2 = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N//2), dtype=tl.float32)
 
         for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
             # Load the next block of A and B, generate a mask by checking the K dimension.

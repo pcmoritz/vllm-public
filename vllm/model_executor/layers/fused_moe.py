@@ -106,7 +106,9 @@ def fused_moe_kernel(
         b_ptrs += BLOCK_SIZE_K * stride_bk
 
     if MUL_ROUTED_WEIGHT:
-        moe_weight = tl.load(topk_weights_ptr + offs_token)
+        moe_weight = tl.load(topk_weights_ptr + offs_token,
+                             mask=token_mask,
+                             other=0)
         accumulator = accumulator * moe_weight[:, None]
 
     accumulator = accumulator.to(compute_type)

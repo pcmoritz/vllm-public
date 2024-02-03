@@ -126,13 +126,13 @@ def fused_moe_kernel(
         tl.store(c_ptrs, accumulator, mask=c_mask)
 
     else:
-        offs_bn1 = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N//2)) % N
+        offs_bn1 = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
         # offs_bn2 = (pid_n * BLOCK_SIZE_N + tl.arange(BLOCK_SIZE_N//2, BLOCK_SIZE_N)) % N
         b_ptrs1 = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
                                                      offs_bn1[None, :] * stride_bn)
         # b_ptrs2 = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
         #                                              offs_bn2[None, :] * stride_bn)
-        acc1 = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N//2), dtype=tl.float32)
+        acc1 = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
         # acc2 = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N//2), dtype=tl.float32)
 
         for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
@@ -159,7 +159,7 @@ def fused_moe_kernel(
         acc1 = acc1.to(compute_type)
         # acc2 = acc2.to(compute_type)
 
-        offs_cn = pid_n * BLOCK_SIZE_N//2 + tl.arange(0, BLOCK_SIZE_N//2)
+        offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
 
         c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
                 None, :]

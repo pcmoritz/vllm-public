@@ -127,7 +127,7 @@ def fused_moe_kernel1(
     c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
         None, :]
     c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, acc1, mask=c_mask)
+    tl.store(c_ptrs, acc1 * tl.sigmoid(acc2), mask=c_mask)
 
 
 @triton.jit

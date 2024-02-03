@@ -79,14 +79,17 @@ def fused_moe_kernel(
     offs_token = tl.load(sorted_token_ids_ptr + offs_token_id)
     token_mask = offs_token < num_valid_tokens
 
-    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
     offs_k = tl.arange(0, BLOCK_SIZE_K)
     a_ptrs = a_ptr + (offs_token[:, None] // top_k * stride_am +
                       offs_k[None, :] * stride_ak)
 
     off_experts = tl.load(expert_ids_ptr + pid_m)
-    b_ptrs = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
-                                                offs_bn[None, :] * stride_bn)
+    b_ptrs = tl.make_block_ptr(
+        base=b_ptr + off_experts * stride_be,
+        shape=(N, K),
+        offsets=(pid_n * BLOCK_SIZE_N, 0),
+        block_shape=(BLOCK_SIZE_N, BLOCK_SIZE_K),
+    )
 
     # -----------------------------------------------------------
     # Iterate to compute a block of the C matrix.
@@ -101,14 +104,12 @@ def fused_moe_kernel(
                     mask=token_mask[:, None] &
                     (offs_k[None, :] < K - k * BLOCK_SIZE_K),
                     other=0.0)
-        b = tl.load(b_ptrs,
-                    mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
-                    other=0.0)
+        b = tl.load(b_ptrs)
         # We accumulate along the K dimension.
         accumulator += tl.dot(a, b)
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs += BLOCK_SIZE_K * stride_bk
+        b_ptrs.advance((0, BLOCK_SIZE_K))
 
     if MUL_ROUTED_WEIGHT:
         moe_weight = tl.load(topk_weights_ptr + offs_token,

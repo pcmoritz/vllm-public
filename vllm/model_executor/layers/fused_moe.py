@@ -108,8 +108,7 @@ def fused_moe_kernel1(
         acc += tl.dot(a, b)
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs1 += BLOCK_SIZE_K * stride_bk
-        b_ptrs2 += BLOCK_SIZE_K * stride_bk
+        b_ptrs += BLOCK_SIZE_K * stride_bk
 
     # acc1 = acc1 * tl.sigmoid(acc2)
     acc = acc.to(compute_type)

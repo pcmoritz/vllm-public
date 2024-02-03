@@ -190,7 +190,7 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
                             sorted_token_ids: torch.Tensor,
                             expert_ids: torch.Tensor,
                             num_tokens_post_padded: torch.Tensor,
-                            mul_routed_weight: bool, top_k: int, config: dict):
+                            mul_routed_weight: bool, fuse_silu: bool, top_k: int, config: dict):
 
     assert topk_weights.stride(1) == 1
     assert sorted_token_ids.stride(0) == 1
@@ -218,6 +218,7 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
         C.stride(1),
         C.stride(2),
         MUL_ROUTED_WEIGHT=mul_routed_weight,
+        FUSE_SILU=fuse_silu,
         top_k=top_k,
         compute_type=tl.bfloat16 if A.dtype == torch.bfloat16 else tl.float16,
         **config,

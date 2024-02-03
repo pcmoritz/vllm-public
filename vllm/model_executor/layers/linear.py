@@ -54,6 +54,7 @@ class UnquantizedLinearMethod(LinearMethodBase):
                        params_dtype: torch.dtype) -> Dict[str, Any]:
         weight = Parameter(torch.empty(output_size_per_partition,
                                        input_size_per_partition,
+                                       device=torch.cuda.current_device(),
                                        dtype=params_dtype),
                            requires_grad=False)
         set_weight_attrs(weight, {"input_dim": 1, "output_dim": 0})

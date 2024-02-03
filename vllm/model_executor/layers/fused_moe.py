@@ -5,6 +5,11 @@ import triton.language as tl
 
 from vllm._C import ops
 
+
+@triton.jit
+def silu(x):
+    return x / (1.0 + tl.expf(-x))
+
 @triton.jit
 def fused_moe_kernel(
     # Pointers to matrices
@@ -159,7 +164,7 @@ def fused_moe_kernel(
         c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
                 None, :]
         c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
-        tl.store(c_ptrs, acc1 * tl.sigmoid(acc2), mask=c_mask)
+        tl.store(c_ptrs, acc1 * silu(acc2), mask=c_mask)
 
 
 def moe_align_block_size(

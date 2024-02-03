@@ -5,7 +5,6 @@ import triton.language as tl
 
 from vllm._C import ops
 
-
 @triton.jit
 def fused_moe_kernel(
     # Pointers to matrices
@@ -37,6 +36,7 @@ def fused_moe_kernel(
     BLOCK_SIZE_K: tl.constexpr,
     GROUP_SIZE_M: tl.constexpr,
     MUL_ROUTED_WEIGHT: tl.constexpr,
+    FUSE_SILU: tl.constexpr,
     top_k: tl.constexpr,
     compute_type: tl.constexpr,
 ):
@@ -116,12 +116,21 @@ def fused_moe_kernel(
                              other=0)
         accumulator = accumulator * moe_weight[:, None]
 
+    if FUSE_SILU:
+        x = accumulator[:,:BLOCK_SIZE_N/2]
+        y = accumulator[:,BLOCK_SIZE_N/2:]
+        accumulator[:, :BLOCK_SIZE_N/2] = x * tl.sigmoid(y)
+
     accumulator = accumulator.to(compute_type)
+
     # -----------------------------------------------------------
     # Write back the block of the output
-    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+    if not FUSE_SILU:
+        offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+    else:
+        offs_cn = pid_n * BLOCK_SIZE_N/2 + tl.arange(0, BLOCK_SIZE_N/2)
     c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
-        None, :]
+            None, :]
     c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
     tl.store(c_ptrs, accumulator, mask=c_mask)
 

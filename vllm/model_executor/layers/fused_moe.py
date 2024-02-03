@@ -111,7 +111,7 @@ def fused_moe_kernel(
         accumulator += tl.dot(b, a)
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs.advance((0, BLOCK_SIZE_K))
+        b_ptrs = tl.advance(b_ptrs, (0, BLOCK_SIZE_K))
 
     if MUL_ROUTED_WEIGHT:
         moe_weight = tl.load(topk_weights_ptr + offs_token,

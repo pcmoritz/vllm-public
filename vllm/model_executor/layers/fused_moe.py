@@ -126,7 +126,7 @@ def fused_moe_kernel1(
     offs_cn = pid_n * (BLOCK_SIZE_N // 2) + tl.arange(0, BLOCK_SIZE_N // 2)
     c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
         None, :]
-    c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
+    c_mask = token_mask[:, None] & (offs_cn[None, :] < N // 2)
     tl.store(c_ptrs, acc1, mask=c_mask)
 
 
@@ -419,10 +419,7 @@ def fused_moe(hidden_states: torch.Tensor,
             'GROUP_SIZE_M': 1
         }
 
-    intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
-                                      device=hidden_states.device,
-                                      dtype=hidden_states.dtype)
-    intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
+    intermediate_cache2 = torch.empty((M, topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
@@ -432,12 +429,10 @@ def fused_moe(hidden_states: torch.Tensor,
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
-    invoke_fused_moe_kernel1(hidden_states, w1, intermediate_cache1,
+    invoke_fused_moe_kernel1(hidden_states, w1, intermediate_cache2,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, False,
                             topk_ids.shape[1], config)
-
-    ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
 
     invoke_fused_moe_kernel2(intermediate_cache2, w2, intermediate_cache3,
                             topk_weights, topk_ids, sorted_token_ids,

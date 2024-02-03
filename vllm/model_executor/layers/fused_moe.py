@@ -305,6 +305,9 @@ def invoke_fused_moe_kernel1(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
     assert topk_weights.stride(1) == 1
     assert sorted_token_ids.stride(0) == 1
 
+    config1 = config.copy()
+    config1['BLOCK_SIZE_M'] = 2 * config['BLOCK_SIZE_M']
+
     grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[
         'BLOCK_SIZE_M']) * triton.cdiv(B.shape[1], META['BLOCK_SIZE_N']), )
 

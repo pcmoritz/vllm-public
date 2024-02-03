@@ -97,7 +97,7 @@ def fused_moe_kernel(
 
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
         # Load the next block of A and B.
-        a = tl.load(a_ptrs)
+        a = tl.load(a_ptrs, mask=token_mask[:, None], other=0.0)
         b = tl.load(b_ptrs)
         # We accumulate along the K dimension.
         accumulator += tl.dot(a, b)

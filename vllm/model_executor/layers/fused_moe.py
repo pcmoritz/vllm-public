@@ -129,10 +129,15 @@ def fused_moe_kernel(
         offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
     else:
         offs_cn = pid_n * BLOCK_SIZE_N/2 + tl.arange(0, BLOCK_SIZE_N/2)
+
     c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
             None, :]
     c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, accumulator, mask=c_mask)
+
+    if not FUSE_SILU:
+        tl.store(c_ptrs, accumulator, mask=c_mask)
+    else:
+        tl.store(c_ptrs, accumulator[:BLOCK_SIZE_N/2], mask=c_mask)
 
 
 def moe_align_block_size(

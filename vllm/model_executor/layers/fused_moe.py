@@ -271,7 +271,7 @@ def fused_moe(hidden_states: torch.Tensor,
             'GROUP_SIZE_M': 1
         }
 
-    intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
+    intermediate_cache2 = torch.empty((M, topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),

@@ -118,7 +118,7 @@ def fused_moe_kernel(
         c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
             None, :]
         c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
-        tl.store(c_ptrs, result, mask=c_mask)
+        tl.store(c_ptrs, accumulator, mask=c_mask)
 
     else:
         offs_bn1 = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N//2)) % N
@@ -150,12 +150,14 @@ def fused_moe_kernel(
             b_ptrs1 += BLOCK_SIZE_K * stride_bk
             b_ptrs2 += BLOCK_SIZE_K * stride_bk
 
+        result = acc1 * tl.sigmoid(acc2).to(compute_type)
+
         offs_cn = pid_n * BLOCK_SIZE_N//2 + tl.arange(0, BLOCK_SIZE_N//2)
 
         c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
                 None, :]
         c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
-        tl.store(c_ptrs, acc1 * tl.sigmoid(acc2).to(compute_type), mask=c_mask)
+        tl.store(c_ptrs, result, mask=c_mask)
 
 
 def moe_align_block_size(

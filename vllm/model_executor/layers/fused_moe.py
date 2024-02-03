@@ -90,7 +90,7 @@ def fused_moe_kernel(
         strides=(stride_bn, stride_bk),
         offsets=(pid_n * BLOCK_SIZE_N, 0),
         block_shape=(BLOCK_SIZE_N, BLOCK_SIZE_K),
-        order=(1,0),
+        order=(0,1),
     )
 
     # -----------------------------------------------------------

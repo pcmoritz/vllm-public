@@ -87,8 +87,10 @@ def fused_moe_kernel(
     b_ptrs = tl.make_block_ptr(
         base=b_ptr + off_experts * stride_be,
         shape=(N, K),
+        strides=(stride_bn, stride_bk),
         offsets=(pid_n * BLOCK_SIZE_N, 0),
         block_shape=(BLOCK_SIZE_N, BLOCK_SIZE_K),
+        order=(1,0),
     )
 
     # -----------------------------------------------------------

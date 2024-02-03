@@ -119,15 +119,15 @@ def fused_moe_kernel1(
         b_ptrs1 += BLOCK_SIZE_K * stride_bk
         b_ptrs2 += BLOCK_SIZE_K * stride_bk
 
+    acc1 = acc1 * tl.sigmoid(acc2)
     acc1 = acc1.to(compute_type)
-    acc2 = acc2.to(compute_type)
     # -----------------------------------------------------------
     # Write back the block of the output
     offs_cn = pid_n * (BLOCK_SIZE_N // 2) + tl.arange(0, BLOCK_SIZE_N // 2)
     c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
         None, :]
     c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, acc1 * tl.sigmoid(acc2.to(tl.float32)).to(compute_type), mask=c_mask)
+    tl.store(c_ptrs, acc1, mask=c_mask)
 
 
 @triton.jit

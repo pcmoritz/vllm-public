@@ -116,10 +116,14 @@ def fused_moe_kernel(
                              other=0)
         accumulator = accumulator * moe_weight[:, None]
 
-    if FUSE_SILU:
-        x = accumulator[:,0:BLOCK_SIZE_N//2]
-        y = accumulator[:,BLOCK_SIZE_N//2:BLOCK_SIZE_N]
-        accumulator[:, 0:BLOCK_SIZE_N//2] = x * tl.sigmoid(y)
+    if not FUSE_SILU:
+        result = accumulator.to(compute_type)
+    else:
+        idx1 = tl.arange(0, BLOCK_SIZE_N//2)
+        idx2 = tl.arange(BLOCK_SIZE_N//2, BLOCK_SIZE_N)
+        x = accumulator[:,idx1]
+        y = accumulator[:,idx2]
+        result = x * tl.sigmoid(y).to(compute_type)
 
     accumulator = accumulator.to(compute_type)
 
@@ -133,11 +137,7 @@ def fused_moe_kernel(
     c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
             None, :]
     c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
-
-    if not FUSE_SILU:
-        tl.store(c_ptrs, accumulator, mask=c_mask)
-    else:
-        tl.store(c_ptrs, accumulator[:BLOCK_SIZE_N//2], mask=c_mask)
+    tl.store(c_ptrs, result, mask=c_mask)
 
 
 def moe_align_block_size(

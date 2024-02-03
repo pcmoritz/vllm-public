@@ -80,8 +80,8 @@ def fused_moe_kernel(
     token_mask = offs_token < num_valid_tokens
 
     offs_k = tl.arange(0, BLOCK_SIZE_K)
-    a_ptrs = a_ptr + (offs_token[:, None] // top_k * stride_am +
-                      offs_k[None, :] * stride_ak)
+    a_ptrs = a_ptr + (offs_token[None,:] // top_k * stride_am +
+                      offs_k[:,None] * stride_ak)
 
     off_experts = tl.load(expert_ids_ptr + pid_m)
     b_ptrs = tl.make_block_ptr(
@@ -90,7 +90,7 @@ def fused_moe_kernel(
         strides=(stride_bn, stride_bk),
         offsets=(pid_n * BLOCK_SIZE_N, 0),
         block_shape=(BLOCK_SIZE_N, BLOCK_SIZE_K),
-        order=(0,1),
+        order=(1,0),
     )
 
     # -----------------------------------------------------------
@@ -103,12 +103,12 @@ def fused_moe_kernel(
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
         # Load the next block of A and B, generate a mask by checking the K dimension.
         a = tl.load(a_ptrs,
-                    mask=token_mask[:, None] &
-                    (offs_k[None, :] < K - k * BLOCK_SIZE_K),
+                    mask=token_mask[None,:] &
+                    (offs_k[:,None] < K - k * BLOCK_SIZE_K),
                     other=0.0)
         b = tl.load(b_ptrs)
         # We accumulate along the K dimension.
-        accumulator += tl.dot(a, b)
+        accumulator += tl.dot(b, a)
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_SIZE_K * stride_ak
         b_ptrs.advance((0, BLOCK_SIZE_K))

@@ -115,7 +115,8 @@ def fused_moe_kernel1(
     # -----------------------------------------------------------
     # Write back the block of the output
     offs_cn = pid_n * (BLOCK_SIZE_N // 2) + tl.arange(0, BLOCK_SIZE_N // 2)
-    c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
+    offs_cn1 = pid_n * (BLOCK_SIZE_N // 2) + tl.arange(0, BLOCK_SIZE_N)
+    c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn1[
         None, :]
     c_mask = token_mask[:, None] & (offs_cn[None, :] < N // 2)
     tl.store(c_ptrs, acc, mask=c_mask)

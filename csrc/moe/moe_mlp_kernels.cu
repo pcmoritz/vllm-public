@@ -83,12 +83,12 @@ using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
 
 using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
-std::vector<typename ProblemShape::UnderlyingProblemShape> MakeProblemSizes(torch::Tensor b, torch::Tensor batch_sizes) {
-  const size_t num_experts = batch_sizes.size(0);
+std::vector<typename ProblemShape::UnderlyingProblemShape> MakeProblemSizes(torch::Tensor b, torch::Tensor cum_num_tokens_per_expert) {
+  const size_t num_experts = cum_num_tokens_per_expert.size(0);
   const size_t k = b.size(1), n = b.size(2);
   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes(num_experts);
   for (int i = 0; i < num_experts; ++i) {
-    int64_t batch_size = batch_sizes.data_ptr<int64_t>()[i];
+    int64_t batch_size = cum_num_tokens_per_expert.data_ptr<int64_t>()[i] - i == 0 ? 0 : cum_num_tokens_per_expert.data_ptr<int64_t>()[i-1];
     problem_sizes[i] = {batch_size, n, k};
   }
   return problem_sizes;
@@ -117,8 +117,8 @@ typename Gemm::Arguments MakeArguments(ProblemData<Gemm>& problem_data,
                torch::Tensor a,
 				       torch::Tensor b,
 				       torch::Tensor c,
-				       torch::Tensor batch_sizes) {
-  problem_data.problem_sizes_host = MakeProblemSizes(b, batch_sizes);
+				       torch::Tensor cum_num_tokens_per_expert) {
+  problem_data.problem_sizes_host = MakeProblemSizes(b, cum_num_tokens_per_expert);
 
   // Calculate the number of threadblocks to use and validate the result.
   int64_t num_experts = problem_data.problem_sizes_host.size();
@@ -199,12 +199,12 @@ void CutlassGroupedGemm(
     torch::Tensor a,
 	torch::Tensor b,
 	torch::Tensor c,
-	torch::Tensor batch_sizes,
+	torch::Tensor cum_num_tokens_per_expert,
     cudaStream_t stream) {
   Gemm gemm;
   ProblemData<Gemm> problem_data;
 
-  auto arguments = MakeArguments<Gemm>(problem_data, a, b, c, batch_sizes);
+  auto arguments = MakeArguments<Gemm>(problem_data, a, b, c, cum_num_tokens_per_expert);
   int64_t workspace_size = gemm.get_workspace_size(arguments);
   auto options = torch::TensorOptions().dtype(torch::kInt8).device(a.device());
   torch::Tensor workspace = torch::empty(workspace_size, options);

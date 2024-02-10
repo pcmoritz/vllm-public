@@ -372,8 +372,6 @@ def fused_moe_(
         permuted_tokens,
         cum_num_tokens_per_expert,
         w1,
-        None,
-        3,
         w2,
     )
 

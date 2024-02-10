@@ -356,6 +356,7 @@ if _is_cuda():
                 "cxx": CXX_FLAGS,
                 "nvcc": NVCC_FLAGS_PUNICA,
             },
+            libraries=["cuda"] if _is_cuda() else [],
         ))
 
 if not _is_neuron():

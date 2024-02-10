@@ -283,7 +283,10 @@ void moe_mlp(
 
   vllm::CutlassGroupedGemm(input_tokens, fc1_expert_weights, fc1_output, cum_num_tokens_per_expert, stream);
 
-  vllm::doGatedActivation<__nv_bfloat16>(fc1_output, glu_output, nullptr, inter_size, num_expanded_tokens, stream);
+  vllm::doGatedActivation<__nv_bfloat16>(
+    fc1_output.data_ptr<at::BFloat16>(),
+    glu_output.data_ptr<at::BFloat16>(),
+    nullptr, inter_size, num_expanded_tokens, stream);
 
   vllm::CutlassGroupedGemm(fc1_output, fc2_expert_weights, moe_output, cum_num_tokens_per_expert, stream);
 }

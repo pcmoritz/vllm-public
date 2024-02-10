@@ -351,7 +351,7 @@ if _is_cuda():
             sources=glob("csrc/moe/*.cu") + glob("csrc/moe/*.cpp"),
             extra_compile_args={
                 "cxx": CXX_FLAGS,
-                "nvcc": NVCC_FLAGS,
+                "nvcc": NVCC_FLAGS + ["-DENABLE_BF16"],
             },
         ))
 

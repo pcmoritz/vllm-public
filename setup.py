@@ -344,6 +344,9 @@ if _is_cuda():
     vllm_extension_sources.append("csrc/quantization/awq/gemm_kernels.cu")
     vllm_extension_sources.append("csrc/custom_all_reduce.cu")
 
+    NVCC_FLAGS_PUNICA += ["-gencode", "arch=compute_90a,code=sm_90a"]
+    NVCC_FLAGS_PUNICA += ["-gencode", "arch=compute_90a,code=compute_90a"]
+
     # Add MoE kernels.
     ext_modules.append(
         CUDAExtension(

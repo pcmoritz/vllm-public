@@ -48,7 +48,7 @@ def _is_cuda() -> bool:
 # Compiler flags.
 CXX_FLAGS = ["-g", "-O2", "-std=c++17"]
 # TODO(woosuk): Should we use -O3?
-NVCC_FLAGS = ["-O2", "-std=c++17"]
+NVCC_FLAGS = ["-O2", "-std=c++17", "-I/cutlass/include", "-I/cutlass/tools/util/include/", '-Xcompiler="-fpermissive"']
 
 if _is_hip():
     if ROCM_HOME is None:

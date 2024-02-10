@@ -48,7 +48,7 @@ constexpr int AlignmentC  = 128 / cutlass::sizeof_bits<ElementC>::value;    // M
 using ElementAccumulator  = float;                                          // Element type for internal accumulation
 using ArchTag             = cutlass::arch::Sm90;                            // Tag indicating the minimum SM that supports the intended feature
 using OperatorClass       = cutlass::arch::OpClassTensorOp;                 // Operator class tag
-using TileShape           = Shape<_128,_128,_64>;                           // Threadblock-level tile size
+using TileShape           = Shape<_256,_128,_64>;                           // Threadblock-level tile size
 using ClusterShape        = Shape<_1,_1,_1>;                                // Shape of the threadblocks in a cluster
 using StageCountType = cutlass::gemm::collective::StageCountAuto;           // Stage count maximized based on the tile size
 using KernelSchedule = cutlass::gemm::KernelGroupTmaWarpSpecializedCooperative; // Kernel to launch
@@ -88,7 +88,7 @@ std::vector<typename ProblemShape::UnderlyingProblemShape> MakeProblemSizes(torc
   const size_t k = b.size(1), n = b.size(2);
   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes(num_experts);
   for (int i = 0; i < num_experts; ++i) {
-    int64_t batch_size = cum_num_tokens_per_expert.data_ptr<int64_t>()[i] - i == 0 ? 0 : cum_num_tokens_per_expert.data_ptr<int64_t>()[i-1];
+    int64_t batch_size = cum_num_tokens_per_expert.data_ptr<int64_t>()[i] - (i == 0 ? 0 : cum_num_tokens_per_expert.data_ptr<int64_t>()[i-1]);
     problem_sizes[i] = {batch_size, n, k};
   }
   return problem_sizes;

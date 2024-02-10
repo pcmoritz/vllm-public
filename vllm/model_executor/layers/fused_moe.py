@@ -370,7 +370,7 @@ def fused_moe_(
     moe_kernels.moe_mlp(
         mlp_output,
         permuted_tokens,
-        cum_num_tokens_per_expert,
+        cum_num_tokens_per_expert.to("cpu"),
         w1,
         w2,
     )

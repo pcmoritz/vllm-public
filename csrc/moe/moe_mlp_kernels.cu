@@ -34,15 +34,15 @@ using ElementC = float;                                                     // E
 
 // A matrix configuration
 using         LayoutA     = cutlass::layout::RowMajor;                      // Layout type for A matrix operand
-constexpr int AlignmentA  = 128 / cutlass::sizeof_bits<ElementA>::value;    // Memory access granularity/alignment of A matrix in units of elements (up to 16 bytes)
+constexpr int AlignmentA  = 16 / cutlass::sizeof_bits<ElementA>::value;    // Memory access granularity/alignment of A matrix in units of elements (up to 16 bytes)
 
 // B matrix configuration
 using         LayoutB     = cutlass::layout::RowMajor;                   // Layout type for B matrix operand
-constexpr int AlignmentB  = 128 / cutlass::sizeof_bits<ElementB>::value;    // Memory access granularity/alignment of B matrix in units of elements (up to 16 bytes)
+constexpr int AlignmentB  = 16 / cutlass::sizeof_bits<ElementB>::value;    // Memory access granularity/alignment of B matrix in units of elements (up to 16 bytes)
 
 // C/D matrix configuration
 using         LayoutC     = cutlass::layout::RowMajor;                   // Layout type for C and D matrix operands
-constexpr int AlignmentC  = 128 / cutlass::sizeof_bits<ElementC>::value;    // Memory access granularity/alignment of C matrix in units of elements (up to 16 bytes)
+constexpr int AlignmentC  = 16 / cutlass::sizeof_bits<ElementC>::value;    // Memory access granularity/alignment of C matrix in units of elements (up to 16 bytes)
 
 // Core kernel configurations
 using ElementAccumulator  = float;                                          // Element type for internal accumulation

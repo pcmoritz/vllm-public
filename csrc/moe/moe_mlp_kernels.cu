@@ -1,5 +1,6 @@
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAGuard.h>
 
 #include "../dispatch_utils.h"
 
@@ -282,7 +283,7 @@ void moe_mlp(
 
   CutlassGroupedGemm(input_tokens, fc1_expert_weights, fc1_output, cum_num_tokens_per_expert, stream);
 
-  doGatedActivation<__nv_bfloat16>(fc1_output, glu_output, nullptr, inter_size, num_expanded_tokens, stream)
+  doGatedActivation<__nv_bfloat16>(fc1_output, glu_output, nullptr, inter_size, num_expanded_tokens, stream);
 
   CutlassGroupedGemm(fc1_output, fc2_expert_weights, moe_output, cum_num_tokens_per_expert, stream);
 }

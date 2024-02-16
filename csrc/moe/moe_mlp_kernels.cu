@@ -30,7 +30,7 @@ namespace vllm {
 using ProblemShape = cutlass::gemm::GroupProblemShape<Shape<int,int,int>>;  // <M,N,K> per group
 using ElementA = cutlass::bfloat16_t;                                       // Element type for A matrix operand
 using ElementB = cutlass::bfloat16_t;                                       // Element type for B matrix operand
-using ElementC = float;                                                     // Element type for C and D matrix operands
+using ElementC = cutlass::bfloat16_t;                                       // Element type for C and D matrix operands
 
 // A matrix configuration
 using         LayoutA     = cutlass::layout::RowMajor;                      // Layout type for A matrix operand
@@ -51,23 +51,23 @@ using OperatorClass       = cutlass::arch::OpClassTensorOp;                 // O
 using TileShape           = Shape<_128,_128,_64>;                           // Threadblock-level tile size
 using ClusterShape        = Shape<_2,_1,_1>;                                // Shape of the threadblocks in a cluster
 using StageCountType = cutlass::gemm::collective::StageCountAuto;           // Stage count maximized based on the tile size
-using KernelSchedule = cutlass::gemm::KernelGroupTmaWarpSpecializedCooperative; // Kernel to launch
-using EpilogueSchedule = cutlass::epilogue::NoSmemWarpSpecializedGroup;                     // Epilogue to launch
+using KernelSchedule = cutlass::gemm::KernelPtrArrayTmaWarpSpecializedCooperative; // Kernel to launch
+using EpilogueSchedule = cutlass::epilogue::PtrArrayNoSmemWarpSpecialized;                     // Epilogue to launch
 
 using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
     cutlass::arch::Sm90, cutlass::arch::OpClassTensorOp,
     TileShape, ClusterShape,
     cutlass::epilogue::collective::EpilogueTileAuto,
     ElementAccumulator, ElementAccumulator,
-    ElementC, LayoutC, AlignmentC,
-    ElementC, LayoutC, AlignmentC,
+    ElementC, LayoutC *, AlignmentC,
+    ElementC, LayoutC *, AlignmentC,
     EpilogueSchedule
   >::CollectiveOp;
 
 using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
     ArchTag, OperatorClass,
-    ElementA, LayoutA, AlignmentA,
-    ElementB, LayoutB, AlignmentB,
+    ElementA, LayoutA *, AlignmentA,
+    ElementB, LayoutB *, AlignmentB,
     ElementAccumulator,
     TileShape, ClusterShape,
     cutlass::gemm::collective::StageCountAutoCarveout<
@@ -87,8 +87,9 @@ std::vector<typename ProblemShape::UnderlyingProblemShape> MakeProblemSizes(torc
   const size_t num_experts = cum_num_tokens_per_expert.size(0);
   const size_t k = b.size(1), n = b.size(2);
   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes(num_experts);
-  for (int i = 0; i < num_experts; ++i) {
-    int64_t batch_size = cum_num_tokens_per_expert.data_ptr<int64_t>()[i] - (i == 0 ? 0 : cum_num_tokens_per_expert.data_ptr<int64_t>()[i-1]);
+  problem_sizes[0] = {cum_num_tokens_per_expert.data_ptr<int64_t>()[0], n, k};
+  for (int i = 1; i < num_experts; ++i) {
+    int64_t batch_size = cum_num_tokens_per_expert.data_ptr<int64_t>()[i] - cum_num_tokens_per_expert.data_ptr<int64_t>()[i-1];
     problem_sizes[i] = {batch_size, n, k};
   }
   return problem_sizes;
@@ -101,9 +102,9 @@ struct ProblemData {
   cutlass::DeviceAllocation<typename Gemm::ElementA *> ptr_A;
   cutlass::DeviceAllocation<typename Gemm::ElementB *> ptr_B;
   cutlass::DeviceAllocation<typename Gemm::ElementC *> ptr_C;
-  cutlass::DeviceAllocation<typename Gemm::GemmKernel::StrideA> stride_A;
-  cutlass::DeviceAllocation<typename Gemm::GemmKernel::StrideB> stride_B;
-  cutlass::DeviceAllocation<typename Gemm::GemmKernel::StrideC> stride_C;
+  cutlass::DeviceAllocation<typename Gemm::GemmKernel::UnderlyingStrideA> stride_A;
+  cutlass::DeviceAllocation<typename Gemm::GemmKernel::UnderlyingStrideB> stride_B;
+  cutlass::DeviceAllocation<typename Gemm::GemmKernel::UnderlyingStrideC> stride_C;
 };
 
 template <typename T>
@@ -124,9 +125,10 @@ typename Gemm::Arguments MakeArguments(ProblemData<Gemm>& problem_data,
   int64_t num_experts = problem_data.problem_sizes_host.size();
 
   // Create the host arrays of leading dimension data and pointer data.
-  using StrideA = typename Gemm::GemmKernel::StrideA;
-  using StrideB = typename Gemm::GemmKernel::StrideB;
-  using StrideC = typename Gemm::GemmKernel::StrideC;
+  using StrideA = typename Gemm::GemmKernel::UnderlyingStrideA;
+  using StrideB = typename Gemm::GemmKernel::UnderlyingStrideB;
+  using StrideC = typename Gemm::GemmKernel::UnderlyingStrideC;
+  using StrideD = typename Gemm::GemmKernel::UnderlyingStrideD;
 
   std::vector<int64_t>  offsets_a(num_experts);
   std::vector<int64_t> offsets_b(num_experts);

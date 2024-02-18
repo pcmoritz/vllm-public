@@ -57,7 +57,7 @@ std::vector<cutlass::gemm::GemmCoord> MakeProblemSizes(torch::Tensor b, torch::T
   std::vector<cutlass::gemm::GemmCoord> problem_sizes(num_experts);
   for (int i = 0; i < num_experts; ++i) {
     int64_t batch_size = cum_num_tokens_per_expert.data_ptr<int64_t>()[i] - (i > 0 ? cum_num_tokens_per_expert.data_ptr<int64_t>()[i-1] : 0);
-    problem_sizes[i] = cutlass::gemm::GemmCoord(batch_sizes.data_ptr<int64_t>()[i], n, k);
+    problem_sizes[i] = cutlass::gemm::GemmCoord(batch_size, n, k);
   }
   return problem_sizes;
 }

@@ -83,7 +83,7 @@ def fused_moe_kernel(
     offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
     offs_k = tl.arange(0, BLOCK_SIZE_K)
     a_ptrs = a_ptr + (offs_token[:,None] // top_k * stride_am +
-                      offs_k[:,None] * stride_ak)
+                      offs_k[None,:] * stride_ak)
 
     off_experts = tl.load(expert_ids_ptr + pid_m)
     b_ptrs = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
@@ -100,14 +100,14 @@ def fused_moe_kernel(
         # Load the next block of A and B, generate a mask by checking the K dimension.
         a = tl.load(a_ptrs,
                     mask=token_mask[:, None] &
-                    (offs_k[:,None] < K - k * BLOCK_SIZE_K),
+                    (offs_k[None,:] < K - k * BLOCK_SIZE_K),
                     other=0.0)
         b = tl.load(b_ptrs,
                     mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
                     other=0.0)
         # We accumulate along the K dimension.
         if BLOCK_SIZE_M == 1:
-            accumulator += tl.sum(b * a, axis=0)
+            accumulator += tl.sum(a[:,:,None] * b[None,:,:], axis=1)
         else:
             accumulator += tl.dot(a, b)
         # Advance the ptrs to the next K block.
@@ -292,8 +292,8 @@ def fused_moe(
     if topk_ids.numel() <= w1.shape[0]:
         config = {
             'BLOCK_SIZE_M': 1,
-            'BLOCK_SIZE_N': 16,
-            'BLOCK_SIZE_K': 128,
+            'BLOCK_SIZE_N': 8,
+            'BLOCK_SIZE_K': 256,
             'GROUP_SIZE_M': 1,
             'num_warps': 4,
             'num_stages': 2,

@@ -121,3 +121,7 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
 
     dur_ms = start_event.elapsed_time(end_event) / num_calls
     return dur_ms
+
+
+if __name__ == "__main__":
+    sys.exit(main())

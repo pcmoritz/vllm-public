@@ -218,6 +218,7 @@ def fused_moe(
     topk: int,
     renormalize: bool,
     inplace: bool = False,
+    config = None,
 ) -> torch.Tensor:
     """
     This function computes a Mixture of Experts (MoE) layer using two sets of weights, w1 and w2, and top-k gating mechanism.
@@ -279,21 +280,6 @@ def fused_moe(
     if renormalize:
         topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
 
-    config = {
-        'BLOCK_SIZE_M': 64,
-        'BLOCK_SIZE_N': 64,
-        'BLOCK_SIZE_K': 32,
-        'GROUP_SIZE_M': 8
-    }
-
-    if topk_ids.numel() <= w1.shape[0]:
-        config = {
-            'BLOCK_SIZE_M': 16,
-            'BLOCK_SIZE_N': 32,
-            'BLOCK_SIZE_K': 64,
-            'GROUP_SIZE_M': 1
-        }
-
     intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
@@ -307,17 +293,31 @@ def fused_moe(
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
+    config1 = {
+        'BLOCK_SIZE_M': config['BLOCK_SIZE_M'],
+        'BLOCK_SIZE_N': config['BLOCK_SIZE_N1'],
+        'BLOCK_SIZE_K': config['BLOCK_SIZE_K1'],
+        'GROUP_SIZE_M': config['GROUP_SIZE_M1'],
+    }
+
     invoke_fused_moe_kernel(hidden_states, w1, intermediate_cache1,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, False,
-                            topk_ids.shape[1], config)
+                            topk_ids.shape[1], config1)
 
     ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
+
+    config2 = {
+        'BLOCK_SIZE_M': config['BLOCK_SIZE_M'],
+        'BLOCK_SIZE_N': config['BLOCK_SIZE_N2'],
+        'BLOCK_SIZE_K': config['BLOCK_SIZE_K2'],
+        'GROUP_SIZE_M': config['GROUP_SIZE_M2'],
+    }
 
     invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, True, 1,
-                            config)
+                            config2)
 
     if inplace:
         return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),

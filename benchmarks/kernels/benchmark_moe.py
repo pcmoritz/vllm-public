@@ -88,20 +88,14 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
         dtype=hidden_states.dtype,
     )
 
-    routing_weights = F.softmax(torch.rand(
-        (num_calls, bs, top_k),
-        device=hidden_states.device,
-        dtype=torch.float32,
-    ),
-                                dim=-1)
+    gating_output = F.softmax(
+        torch.rand(
+            (num_calls, bs, num_total_experts),
+            device=hidden_states.device,
+            dtype=torch.float32,
+        ),
+    dim=-1)
 
-    selected_experts = torch.randint_like(
-        routing_weights,
-        low=0,
-        high=num_total_experts,
-        device=hidden_states.device,
-        dtype=torch.int64,
-    )
 
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
@@ -112,8 +106,9 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
             hidden_states=hidden_states,
             w1=ws,
             w2=w2s,
-            topk_weights=routing_weights[i],
-            topk_ids=selected_experts[i],
+            gating_output=gating_output[i],
+            topk=2,
+            renormalize=True,
             inplace=True,
         )
     end_event.record()

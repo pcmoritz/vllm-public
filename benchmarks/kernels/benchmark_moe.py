@@ -76,6 +76,7 @@ def run_grid(method):
                     tp_size=tp_size,
                     model_intermediate_size=model_intermediate_size,
                     method=method,
+                    config=config,
                 )
 
                 kernel_dur_us = 1000 * kernel_dur_ms

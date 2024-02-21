@@ -218,6 +218,7 @@ def fused_moe(
     topk: int,
     renormalize: bool,
     inplace: bool = False,
+    fused_moe_config = None,
 ) -> torch.Tensor:
     """
     This function computes a Mixture of Experts (MoE) layer using two sets of weights, w1 and w2, and top-k gating mechanism.
@@ -279,20 +280,23 @@ def fused_moe(
     if renormalize:
         topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
 
-    config = {
-        'BLOCK_SIZE_M': 64,
-        'BLOCK_SIZE_N': 64,
-        'BLOCK_SIZE_K': 32,
-        'GROUP_SIZE_M': 8
-    }
-
-    if topk_ids.numel() <= w1.shape[0]:
+    if not fused_moe_config:
         config = {
-            'BLOCK_SIZE_M': 16,
-            'BLOCK_SIZE_N': 32,
-            'BLOCK_SIZE_K': 64,
-            'GROUP_SIZE_M': 1
+            'BLOCK_SIZE_M': 64,
+            'BLOCK_SIZE_N': 64,
+            'BLOCK_SIZE_K': 32,
+            'GROUP_SIZE_M': 8
         }
+
+        if topk_ids.numel() <= w1.shape[0]:
+            config = {
+                'BLOCK_SIZE_M': 16,
+                'BLOCK_SIZE_N': 32,
+                'BLOCK_SIZE_K': 64,
+                'GROUP_SIZE_M': 1
+            }
+    else:
+        config = fused_moe_config[min(fused_moe_config.keys(), key=lambda x: abs(x - M))]
 
     intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
                                       device=hidden_states.device,

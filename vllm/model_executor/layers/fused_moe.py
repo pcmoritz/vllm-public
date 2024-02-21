@@ -293,31 +293,17 @@ def fused_moe(
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
-    config1 = {
-        'BLOCK_SIZE_M': config['BLOCK_SIZE_M'],
-        'BLOCK_SIZE_N': config['BLOCK_SIZE_N1'],
-        'BLOCK_SIZE_K': config['BLOCK_SIZE_K1'],
-        'GROUP_SIZE_M': config['GROUP_SIZE_M1'],
-    }
-
     invoke_fused_moe_kernel(hidden_states, w1, intermediate_cache1,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, False,
-                            topk_ids.shape[1], config1)
+                            topk_ids.shape[1], config)
 
     ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
-
-    config2 = {
-        'BLOCK_SIZE_M': config['BLOCK_SIZE_M'],
-        'BLOCK_SIZE_N': config['BLOCK_SIZE_N2'],
-        'BLOCK_SIZE_K': config['BLOCK_SIZE_K2'],
-        'GROUP_SIZE_M': config['GROUP_SIZE_M2'],
-    }
 
     invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, True, 1,
-                            config2)
+                            config)
 
     if inplace:
         return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),

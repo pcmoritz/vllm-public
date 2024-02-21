@@ -28,21 +28,16 @@ def run_grid(method):
     num_trials = 1
 
     configs = []
-    for block_size_n1 in [8, 16]:
-        for block_size_n2 in [8, 16]:
-            for block_size_k1 in [64, 128, 256]:
-                for block_size_k2 in [64, 128, 256]:
-                    configs.append(
-                        {
-                            "BLOCK_SIZE_M": 1,
-                            "BLOCK_SIZE_N1": block_size_n1,
-                            "BLOCK_SIZE_N2": block_size_n2,
-                            "BLOCK_SIZE_K1": block_size_k1,
-                            "BLOCK_SIZE_K2": block_size_k2,
-                            "GROUP_SIZE_M1": 1,
-                            "GROUP_SIZE_M2": 1,
-                        }
-                    )
+    for block_size_n in [8, 16, 32, 64]:
+        for block_size_k in [64, 128, 256]:
+            configs.append(
+                {
+                    "BLOCK_SIZE_M": 16,
+                    "BLOCK_SIZE_N": block_size_n,
+                    "BLOCK_SIZE_K": block_size_k,
+                    "GROUP_SIZE_M": 1,
+                }
+            )
 
     for tp_size in tp_size_grid:
         # for bs in bs_grid:

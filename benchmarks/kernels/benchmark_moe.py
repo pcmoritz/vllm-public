@@ -5,6 +5,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 from vllm.model_executor.layers.fused_moe import fused_moe
 import torch
 import torch.nn.functional as F
+import triton
 import sys
 
 
@@ -14,7 +15,7 @@ def main():
 
 
 def run_grid(method):
-    bs = 1
+    bs = 32
     # bs_grid = [1, 2, 4, 8, 16, 32, 64, 128, 1024, 2048, 4096, 8192]
     d_model = 4096
     num_total_experts = 8
@@ -28,16 +29,17 @@ def run_grid(method):
     num_trials = 1
 
     configs = []
-    for block_size_n in [8, 16, 32, 64]:
-        for block_size_k in [64, 128, 256]:
-            configs.append(
-                {
-                    "BLOCK_SIZE_M": 16,
-                    "BLOCK_SIZE_N": block_size_n,
-                    "BLOCK_SIZE_K": block_size_k,
-                    "GROUP_SIZE_M": 1,
-                }
-            )
+    for block_size_n in [16, 32, 64, 128]:
+        for block_size_m in [16, 32]:
+            for block_size_k in [64, 128, 256, 512]:
+                configs.append(
+                    {
+                        "BLOCK_SIZE_M": block_size_m,
+                        "BLOCK_SIZE_N": block_size_n,
+                        "BLOCK_SIZE_K": block_size_k,
+                        "GROUP_SIZE_M": 1,
+                    }
+                )
 
     for tp_size in tp_size_grid:
         # for bs in bs_grid:
@@ -46,18 +48,21 @@ def run_grid(method):
             print(f'{config}')
             # warmup
             print(f'warming up')
-            for _ in range(num_warmup_trials):
-                run_timing(
-                    num_calls=num_calls,
-                    bs=bs,
-                    d_model=d_model,
-                    num_total_experts=num_total_experts,
-                    top_k=top_k,
-                    tp_size=tp_size,
-                    model_intermediate_size=model_intermediate_size,
-                    method=method,
-                    config=config,
-                )
+            try:
+                for _ in range(num_warmup_trials):
+                    run_timing(
+                        num_calls=num_calls,
+                        bs=bs,
+                        d_model=d_model,
+                        num_total_experts=num_total_experts,
+                        top_k=top_k,
+                        tp_size=tp_size,
+                        model_intermediate_size=model_intermediate_size,
+                        method=method,
+                        config=config,
+                    )
+            except triton.runtime.autotuner.OutOfResources:
+                continue
 
             # trial
             print(f'benchmarking')

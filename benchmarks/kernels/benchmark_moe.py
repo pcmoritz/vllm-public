@@ -15,7 +15,7 @@ def main():
 
 
 def run_grid(method):
-    bs = 32
+    bs = 4096
     # bs_grid = [1, 2, 4, 8, 16, 32, 64, 128, 1024, 2048, 4096, 8192]
     d_model = 4096
     num_total_experts = 8
@@ -30,16 +30,24 @@ def run_grid(method):
 
     configs = []
     for block_size_n in [16, 32, 64, 128]:
-        for block_size_m in [16, 32]:
-            for block_size_k in [64, 128, 256, 512]:
-                configs.append(
-                    {
-                        "BLOCK_SIZE_M": block_size_m,
-                        "BLOCK_SIZE_N": block_size_n,
-                        "BLOCK_SIZE_K": block_size_k,
-                        "GROUP_SIZE_M": 1,
-                    }
-                )
+        for block_size_m in [16, 32, 64, 128, 256]:
+            for block_size_k in [64, 128, 256]:
+                for group_size_m in [1, 2, 4, 8, 16, 32, 64]:
+                    if group_size_m >= block_size_m:
+                        continue
+                    if block_size_m >= bs:
+                        continue
+                    configs.append(
+                        {
+                            "BLOCK_SIZE_M": block_size_m,
+                            "BLOCK_SIZE_N": block_size_n,
+                            "BLOCK_SIZE_K": block_size_k,
+                            "GROUP_SIZE_M": group_size_m,
+                        }
+                    )
+
+    best_config = None
+    best_time_us = 1e20
 
     for tp_size in tp_size_grid:
         # for bs in bs_grid:
@@ -82,9 +90,16 @@ def run_grid(method):
                 kernel_dur_us = 1000 * kernel_dur_ms
                 model_dur_ms = kernel_dur_ms * num_layers
 
+                if kernel_dur_us < best_time_us:
+                    best_config = config
+                    best_time_us = kernel_dur_us
+
                 print(
                     f'{kernel_dur_us=:.1f} {model_dur_ms=:.1f} {bs=} {tp_size=} {top_k=} {num_total_experts=} {d_model=} {model_intermediate_size=} {num_layers=}'
                 )
+
+    print("best_time_us", best_time_us)
+    print("best_config", best_config)
 
 
 def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,

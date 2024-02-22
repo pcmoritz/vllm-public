@@ -20,7 +20,7 @@ def run_grid(method):
     d_model = 4096
     num_total_experts = 8
     top_k = 2
-    tp_size_grid = [2]
+    tp_size_grid = [4]
     model_intermediate_size = 14336
     num_layers = 32
     num_calls = 100
@@ -29,22 +29,27 @@ def run_grid(method):
     num_trials = 1
 
     configs = []
-    for block_size_n in [16, 32, 64, 128]:
-        for block_size_m in [16, 32, 64, 128, 256]:
+    for block_size_n in [128, 256]:
+        for block_size_m in [64, 128, 256]:
             for block_size_k in [64, 128, 256]:
-                for group_size_m in [1, 2, 4, 8, 16, 32, 64]:
-                    if group_size_m >= block_size_m:
-                        continue
-                    if block_size_m >= bs:
-                        continue
-                    configs.append(
-                        {
-                            "BLOCK_SIZE_M": block_size_m,
-                            "BLOCK_SIZE_N": block_size_n,
-                            "BLOCK_SIZE_K": block_size_k,
-                            "GROUP_SIZE_M": group_size_m,
-                        }
-                    )
+                for group_size_m in [1, 16, 32, 64]:
+                    for num_warps in [4, 8]:
+                        if group_size_m >= block_size_m:
+                            continue
+                        # if block_size_m >= bs:
+                        #     continue
+                        configs.append(
+                            {
+                                "BLOCK_SIZE_M": block_size_m,
+                                "BLOCK_SIZE_N": block_size_n,
+                                "BLOCK_SIZE_K": block_size_k,
+                                "GROUP_SIZE_M": group_size_m,
+                                "num_warps": num_warps,
+                                "num_stages": 4,
+                            }
+                        )
+
+    configs.append({"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 128, "BLOCK_SIZE_K": 128, "GROUP_SIZE_M": 32, "num_warps": 4, "num_stages": 4})
 
     best_config = None
     best_time_us = 1e20

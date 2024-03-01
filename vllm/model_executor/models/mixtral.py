@@ -29,7 +29,7 @@ from transformers import MixtralConfig
 
 from vllm.config import LoRAConfig
 from vllm.model_executor.input_metadata import InputMetadata
-from vllm.model_executor.layers.attention import PagedAttention
+from vllm.model_executor.layers.attention import AttentionFactory
 from vllm.model_executor.layers.fused_moe import fused_moe
 from vllm.model_executor.layers.layernorm import RMSNorm
 from vllm.model_executor.layers.linear import (LinearMethodBase,
@@ -197,7 +197,7 @@ class MixtralAttention(nn.Module):
             base=int(self.rope_theta),
             is_neox_style=True,
         )
-        self.attn = PagedAttention(
+        self.attn = AttentionFactory.create_attention(
             self.num_heads,
             self.head_dim,
             self.scaling,
@@ -215,8 +215,8 @@ class MixtralAttention(nn.Module):
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         q, k = self.rotary_emb(positions, q, k)
-        k_cache, v_cache = kv_cache
-        attn_output = self.attn(q, k, v, k_cache, v_cache, input_metadata)
+        # k_cache, v_cache = kv_cache
+        attn_output = self.attn(q, k, v, kv_cache, input_metadata)
         output, _ = self.o_proj(attn_output)
         return output
 

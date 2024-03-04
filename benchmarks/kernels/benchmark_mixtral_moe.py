@@ -9,10 +9,14 @@ import torch
 import torch.nn.functional as F
 import triton
 
+import triton.language as tl
+
+from triton.runtime.jit import reinterpret as tl_reinterpret
+
 
 def main():
     method = fused_moe
-    for bs in [16]:
+    for bs in [128]:
         run_grid(bs, method=method)
 
 
@@ -122,19 +126,25 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
         (bs, d_model),
         device="cuda:0",
         dtype=torch.bfloat16,
-    )
+    )# .to(torch.float8_e4m3fn)
+
+    # hidden_states = tl_reinterpret(hidden_states, dtype=tl.float8e4nv)
 
     ws = torch.rand(
         (num_total_experts, 2 * shard_intermediate_size, d_model),
         device=hidden_states.device,
         dtype=torch.bfloat16,
-    ).to(torch.float8_e4m3fn)
+    )# .to(torch.float8_e4m3fn)
+
+    # ws = tl_reinterpret(ws, dtype=tl.float8e4nv)
 
     w2s = torch.rand(
         (num_total_experts, d_model, shard_intermediate_size),
         device=hidden_states.device,
         dtype=torch.bfloat16,
-    ).to(torch.float8_e4m3fn)
+    )# .to(torch.float8_e4m3fn)
+
+    # w2s = tl_reinterpret(w2s, dtype=tl.float8e4nv)
 
     gating_output = F.softmax(torch.rand(
         (num_calls, bs, num_total_experts),

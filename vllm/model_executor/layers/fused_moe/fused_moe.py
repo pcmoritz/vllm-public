@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Tuple
 import torch
 import triton
 import triton.language as tl
+from triton.runtime.jit import reinterpret as tl_reinterpret
 
 from vllm._C import ops
 from vllm.logger import init_logger
@@ -362,7 +363,10 @@ def fused_moe(
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
-    invoke_fused_moe_kernel(hidden_states.to(dtype=torch.float8_e4m3fn),
+    w1 = tl_reinterpret(w1, dtype=tl.float8e4nv)
+    hidden_states2 = tl_reinterpret(hidden_states.to(dtype=torch.float8_e4m3fn), dtype=tl.float8e4nv)
+
+    invoke_fused_moe_kernel(hidden_states2,
                             w1, intermediate_cache1,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, False,
@@ -370,7 +374,10 @@ def fused_moe(
 
     ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
 
-    invoke_fused_moe_kernel(intermediate_cache2.to(dtype=torch.float8_e4m3fn),
+    w2 = tl_reinterpret(w2, dtype=tl.float8e4nv)
+    intermediate_cache2 = tl_reinterpret(intermediate_cache2.to(dtype=torch.float8_e4m3fn), dtype=tl.float8e4nv)
+
+    invoke_fused_moe_kernel(intermediate_cache2,
                             w2, intermediate_cache3,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, True, 1,

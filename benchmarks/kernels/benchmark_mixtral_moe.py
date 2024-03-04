@@ -12,10 +12,7 @@ import triton
 
 def main():
     method = fused_moe
-    for bs in [
-            1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 256, 512, 1024, 1536,
-            2048, 3072, 4096
-    ]:
+    for bs in [16]:
         run_grid(bs, method=method)
 
 
@@ -130,14 +127,14 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
     ws = torch.rand(
         (num_total_experts, 2 * shard_intermediate_size, d_model),
         device=hidden_states.device,
-        dtype=hidden_states.dtype,
-    )
+        dtype=torch.bfloat16,
+    ).to(torch.float8_e4m3fn)
 
     w2s = torch.rand(
         (num_total_experts, d_model, shard_intermediate_size),
         device=hidden_states.device,
-        dtype=hidden_states.dtype,
-    )
+        dtype=torch.bfloat16,
+    ).to(torch.float8_e4m3fn)
 
     gating_output = F.softmax(torch.rand(
         (num_calls, bs, num_total_experts),

@@ -48,6 +48,8 @@ def fused_moe_kernel(
     MUL_ROUTED_WEIGHT: tl.constexpr,
     top_k: tl.constexpr,
     compute_type: tl.constexpr,
+    # acc_type: tl.constexpr,
+    # fp8_fast_accum: tl.constexpr,
 ):
     """
     Implements the fused computation for a Mixture of Experts (MOE) using token and expert matrices.
@@ -114,7 +116,10 @@ def fused_moe_kernel(
                     mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
                     other=0.0)
         # We accumulate along the K dimension.
-        accumulator += tl.dot(a, b)
+        # if fp8_fast_accum:
+        accumulator = tl.dot(a, b, acc=accumulator, allow_tf32=True)
+        # else:
+        #     accumulator += tl.dot(a, b)
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_SIZE_K * stride_ak
         b_ptrs += BLOCK_SIZE_K * stride_bk
@@ -357,14 +362,16 @@ def fused_moe(
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
-    invoke_fused_moe_kernel(hidden_states, w1, intermediate_cache1,
+    invoke_fused_moe_kernel(hidden_states.to(dtype=torch.float8_e4m3fn),
+                            w1, intermediate_cache1,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, False,
                             topk_ids.shape[1], config)
 
     ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
 
-    invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3,
+    invoke_fused_moe_kernel(intermediate_cache2.to(dtype=torch.float8_e4m3fn),
+                            w2, intermediate_cache3,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, True, 1,
                             config)

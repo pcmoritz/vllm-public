@@ -346,6 +346,9 @@ if _is_cuda():
         "csrc/quantization/marlin/marlin_cuda_kernel.cu")
     vllm_extension_sources.append("csrc/custom_all_reduce.cu")
 
+    NVCC_FLAGS += ["-gencode", "arch=compute_90a,code=sm_90a"]
+    NVCC_FLAGS += ["-gencode", "arch=compute_90a,code=compute_90a"]
+
     # Add MoE kernels.
     ext_modules.append(
         CUDAExtension(
@@ -359,6 +362,7 @@ if _is_cuda():
                 "cxx": CXX_FLAGS,
                 "nvcc": NVCC_FLAGS,
             },
+            libraries=["cuda"],
         ))
 
 if not _is_neuron():

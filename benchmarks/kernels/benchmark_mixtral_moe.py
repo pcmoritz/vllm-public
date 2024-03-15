@@ -2,7 +2,7 @@ import json
 import os
 import sys
 
-from vllm.model_executor.layers.fused_moe import fused_moe, get_config_file_name
+from vllm.model_executor.layers.fused_moe import fused_moe_, get_config_file_name
 import torch
 import torch.nn.functional as F
 import triton
@@ -11,7 +11,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def main():
-    method = fused_moe
+    method = fused_moe_
     for bs in [
             1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 256, 512, 1024, 1536,
             2048, 3072, 4096
@@ -166,8 +166,6 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
             gating_output=gating_output[i],
             topk=2,
             renormalize=True,
-            inplace=True,
-            override_config=config,
         )
     end_event.record()
     end_event.synchronize()

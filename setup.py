@@ -48,7 +48,7 @@ def _is_cuda() -> bool:
 # Compiler flags.
 CXX_FLAGS = ["-g", "-O2", "-std=c++17"]
 # TODO(woosuk): Should we use -O3?
-NVCC_FLAGS = ["-O2", "-std=c++17"]
+NVCC_FLAGS = ["-O2", "-std=c++17", '-Xcompiler="-fpermissive"']
 
 if _is_hip():
     if ROCM_HOME is None:
@@ -351,6 +351,10 @@ if _is_cuda():
         CUDAExtension(
             name="vllm._moe_C",
             sources=glob("csrc/moe/*.cu") + glob("csrc/moe/*.cpp"),
+            include_dirs=[
+                os.path.join(ROOT_DIR, "third_party/cutlass/include/"),
+                os.path.join(ROOT_DIR, "third_party/cutlass/tools/util/include/"),
+            ],
             extra_compile_args={
                 "cxx": CXX_FLAGS,
                 "nvcc": NVCC_FLAGS,

@@ -66,8 +66,8 @@ def fused_moe_kernel(
 
     pid = tl.program_id(axis=0)
 
-    grid_m = tl.cdiv(m, BLOCK_SIZE_M)
-    grid_n = tl.cdiv(n, BLOCK_SIZE_N)
+    grid_m = tl.cdiv(EM, BLOCK_SIZE_M)
+    grid_n = tl.cdiv(N, BLOCK_SIZE_N)
 
     pid_m = (pid % grid_n)
     pid_n = pid // grid_m

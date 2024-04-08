@@ -30,10 +30,9 @@ def fused_moe_kernel(
     K,
     EM,
     num_valid_tokens,
-    # The stride variables represent how much to increase the ptr by when
-    # moving by 1 element in a particular dimension. E.g. `stride_am` is
-    # how much to increase `a_ptr` by to get the element one row down
-    # (A has M rows).
+    # The stride variables represent how much to increase the ptr by when moving by 1
+    # element in a particular dimension. E.g. `stride_am` is how much to increase `a_ptr`
+    # by to get the element one row down (A has M rows).
     stride_am,
     stride_ak,
     stride_be,
@@ -41,63 +40,42 @@ def fused_moe_kernel(
     stride_bn,
     stride_cm,
     stride_cn,
+    stride_weight,
+    stride_token_id,
     # Meta-parameters
     BLOCK_SIZE_M: tl.constexpr,
     BLOCK_SIZE_N: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
-    GROUP_SIZE_M: tl.constexpr,
     MUL_ROUTED_WEIGHT: tl.constexpr,
     top_k: tl.constexpr,
     compute_type: tl.constexpr,
 ):
     """
-    Implements the fused computation for a Mixture of Experts (MOE) using
-    token and expert matrices.
+    Implements the fused computation for a Mixture of Experts (MOE) using token and expert matrices.
 
     Key Parameters:
-    - A: The input tensor representing tokens with shape (*, K), where '*' can
-        be any shape representing batches and K is the feature dimension of
-        each token.
-    - B: The stacked MOE weight tensor with shape (E, N, K), where E is
-        the number of experts, K is the input feature dimension, and N is
-        the output feature dimension.
-    - C: The output cache tensor with shape (M, topk, N), where M is the
-        total number of tokens post padding, topk is the number of times
-        each token is repeated, and N is the output feature dimension.
-    - sorted_token_ids: A tensor containing the sorted indices of tokens,
-        repeated topk times and arranged by the expert index they are
-        assigned to.
-    - expert_ids: A tensor containing the indices of the expert for each
-        block. It determines which expert matrix from B should be used for
-        each block in A.
-    This kernel performs the multiplication of a token by its corresponding
-    expert matrix as determined by `expert_ids`. The sorting of
-    `sorted_token_ids` by expert index and padding ensures divisibility by
-    BLOCK_SIZE_M, which is necessary to maintain consistency in block matrix
-    multiplication across different blocks processed by the same expert.
+    - A: The input tensor representing tokens with shape (*, K), where '*' can be any shape representing batches and K is the feature dimension of each token.
+    - B: The stacked MOE weight tensor with shape (E, N, K), where E is the number of experts, K is the input feature dimension, and N is the output feature dimension.
+    - C: The output cache tensor with shape (M, topk, N), where M is the total number of tokens post padding, topk is the number of times each token is repeated,
+        and N is the output feature dimension.
+    - sorted_token_ids: A tensor containing the sorted indices of tokens, repeated topk times and arranged by the expert index they are assigned to.
+    - expert_ids: A tensor containing the indices of the expert for each block. It determines which expert matrix from B should be used for each block in A.
+    This kernel performs the multiplication of a token by its corresponding expert matrix as determined by `expert_ids`. The sorting of `sorted_token_ids`
+    by expert index and padding ensures divisibility by BLOCK_SIZE_M, which is necessary to maintain consistency in block matrix multiplication across different blocks processed by the same expert.
     """
-    # -----------------------------------------------------------
-    # Map program ids `pid` to the block of C it should compute.
-    # This is done in a grouped ordering to promote L2 data reuse.
-    pid = tl.program_id(axis=0)
-    num_pid_m = tl.cdiv(EM, BLOCK_SIZE_M)
-    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
-    num_pid_in_group = GROUP_SIZE_M * num_pid_n
-    group_id = pid // num_pid_in_group
-    first_pid_m = group_id * GROUP_SIZE_M
-    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
-    pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size_m)
-    pid_n = (pid % num_pid_in_group) // group_size_m
 
-    # ----------------------------------------------------------
-    # Create pointers for the first blocks of A and B.
-    # We will advance this pointer as we move in the K direction
-    # and accumulate
-    # `a_ptrs` is a block of [BLOCK_SIZE_M, BLOCK_SIZE_K] pointers
-    # `b_ptrs` is a block of [BLOCK_SIZE_K, BLOCK_SIZE_N] pointers
+    pid = tl.program_id(axis=0)
+
+    grid_m = tl.cdiv(m, BLOCK_SIZE_M)
+    grid_n = tl.cdiv(n, BLOCK_SIZE_N)
+
+    pid_m = (pid % grid_n)
+    pid_n = pid // grid_m
+
     num_tokens_post_padded = tl.load(num_tokens_post_padded_ptr)
     if pid_m * BLOCK_SIZE_M >= num_tokens_post_padded:
         return
+
     offs_token_id = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
     offs_token = tl.load(sorted_token_ids_ptr + offs_token_id)
     token_mask = offs_token < num_valid_tokens
@@ -110,7 +88,6 @@ def fused_moe_kernel(
     off_experts = tl.load(expert_ids_ptr + pid_m)
     b_ptrs = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
                                                 offs_bn[None, :] * stride_bn)
-
     # -----------------------------------------------------------
     # Iterate to compute a block of the C matrix.
     # We accumulate into a `[BLOCK_SIZE_M, BLOCK_SIZE_N]` block
@@ -119,8 +96,7 @@ def fused_moe_kernel(
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
 
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        # Load the next block of A and B, generate a mask by checking the
-        # K dimension.
+        # Load the next block of A and B, generate a mask by checking the K dimension.
         a = tl.load(a_ptrs,
                     mask=token_mask[:, None] &
                     (offs_k[None, :] < K - k * BLOCK_SIZE_K),
@@ -135,7 +111,7 @@ def fused_moe_kernel(
         b_ptrs += BLOCK_SIZE_K * stride_bk
 
     if MUL_ROUTED_WEIGHT:
-        moe_weight = tl.load(topk_weights_ptr + offs_token,
+        moe_weight = tl.load(topk_weights_ptr + offs_token * stride_weight,
                              mask=token_mask,
                              other=0)
         accumulator = accumulator * moe_weight[:, None]
@@ -238,6 +214,8 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
         B.stride(1),
         C.stride(1),
         C.stride(2),
+        topk_weights.stride(1),
+        sorted_token_ids.stride(0),
         MUL_ROUTED_WEIGHT=mul_routed_weight,
         top_k=top_k,
         compute_type=tl.bfloat16 if A.dtype == torch.bfloat16 else tl.float16,

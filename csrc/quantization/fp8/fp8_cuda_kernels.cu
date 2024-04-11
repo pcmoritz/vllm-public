@@ -20,7 +20,7 @@ __global__ void scaled_fp8_quant_kernel(
     const scalar_t x = input[token_idx * d + idx];
     const scalar_t s = scales[idx];
     const scalar_t r = x / s;
-    out[token_idx * d + idx] = c10::convert(r);
+    out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(r);
   }
 }
 

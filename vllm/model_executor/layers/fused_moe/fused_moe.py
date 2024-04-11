@@ -107,11 +107,11 @@ def fused_moe_kernel(
     offs_k = tl.arange(0, BLOCK_SIZE_K)
     a_ptrs = a_ptr + (offs_token[:, None] // top_k * stride_am +
                       offs_k[None, :] * stride_ak)
+    s_ptrs = s_ptr + offs_k[None, :] * stride_ak
 
     off_experts = tl.load(expert_ids_ptr + pid_m)
     b_ptrs = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
                                                 offs_bn[None, :] * stride_bn)
-    s_ptrs = s_ptr + offs_bn[None, :] * stride_bn
 
     # -----------------------------------------------------------
     # Iterate to compute a block of the C matrix.
@@ -127,12 +127,13 @@ def fused_moe_kernel(
                     mask=token_mask[:, None] &
                     (offs_k[None, :] < K - k * BLOCK_SIZE_K),
                     other=0.0)
+        s = tl.load(s_ptrs)
+        a_scaled = (a / s).to(tl.float8e4nv)
         b = tl.load(b_ptrs,
                     mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
                     other=0.0)
-        s = tl.load(s_ptrs)
         # We accumulate along the K dimension.
-        accumulator = tl.dot(a, (b / s).to(tl.float8e4nv), acc=accumulator, allow_tf32=True)
+        accumulator = tl.dot(a_scaled, b, acc=accumulator, allow_tf32=True)
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_SIZE_K * stride_ak
         b_ptrs += BLOCK_SIZE_K * stride_bk

@@ -385,10 +385,10 @@ def fused_moe(
 
     intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
                                       device=hidden_states.device,
-                                      dtype=torch.float16)
+                                      dtype=torch.float8_e4m3fn)
     intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
-                                      dtype=torch.float16)
+                                      dtype=torch.float8_e4m3fn)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
                                       device=hidden_states.device,
                                       dtype=torch.float16)
@@ -406,7 +406,7 @@ def fused_moe(
 
     ops.scaled_silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N), s2)
 
-    invoke_fused_moe_kernel(intermediate_cache2.to(dtype=torch.float8_e4m3fn),
+    invoke_fused_moe_kernel(intermediate_cache2,
                             w2, intermediate_cache3,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, True, 1,

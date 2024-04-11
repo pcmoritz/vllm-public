@@ -5,6 +5,7 @@ import sys
 import torch
 import torch.nn.functional as F
 import triton
+from tqdm import tqdm
 
 from vllm.model_executor.layers.fused_moe import (fused_moe,
                                                   get_config_file_name)
@@ -34,19 +35,9 @@ def run_grid(bs, method):
     num_trials = 1
 
     configs = []
-    if bs <= 16:
-        BLOCK_SIZES_M = [16]
-    elif bs <= 32:
-        BLOCK_SIZES_M = [16, 32]
-    elif bs <= 64:
-        BLOCK_SIZES_M = [16, 32, 64]
-    elif bs <= 128:
-        BLOCK_SIZES_M = [16, 32, 64, 128]
-    else:
-        BLOCK_SIZES_M = [16, 32, 64, 128, 256]
 
     for block_size_n in [32, 64, 128, 256]:
-        for block_size_m in BLOCK_SIZES_M:
+        for block_size_m in [16, 32, 64, 128, 256]:
             for block_size_k in [64, 128, 256]:
                 for group_size_m in [1, 16, 32, 64]:
                     for num_warps in [4, 8]:
@@ -62,11 +53,13 @@ def run_grid(bs, method):
     best_config = None
     best_time_us = 1e20
 
-    for config in configs:
-        print(f'{tp_size=} {bs=}')
-        print(f'{config}')
+    print(f'{tp_size=} {bs=}')
+
+    for config in tqdm(configs):
+        # print(f'{tp_size=} {bs=}')
+        # print(f'{config}')
         # warmup
-        print('warming up')
+        # print('warming up')
         try:
             for _ in range(num_warmup_trials):
                 run_timing(
@@ -84,7 +77,7 @@ def run_grid(bs, method):
             continue
 
         # trial
-        print('benchmarking')
+        # print('benchmarking')
         for _ in range(num_trials):
             kernel_dur_ms = run_timing(
                 num_calls=num_calls,
@@ -105,9 +98,9 @@ def run_grid(bs, method):
                 best_config = config
                 best_time_us = kernel_dur_us
 
-            print(f'{kernel_dur_us=:.1f} {model_dur_ms=:.1f}'
-                  f' {bs=} {tp_size=} {top_k=} {num_total_experts=} '
-                  f'{d_model=} {model_intermediate_size=} {num_layers=}')
+            # print(f'{kernel_dur_us=:.1f} {model_dur_ms=:.1f}'
+            #       f' {bs=} {tp_size=} {top_k=} {num_total_experts=} '
+            #       f'{d_model=} {model_intermediate_size=} {num_layers=}')
 
     print("best_time_us", best_time_us)
     print("best_config", best_config)
@@ -134,20 +127,27 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
     hidden_states = torch.rand(
         (bs, d_model),
         device="cuda:0",
-        dtype=torch.bfloat16,
+        dtype=torch.float16,
     )
 
     ws = torch.rand(
         (num_total_experts, 2 * shard_intermediate_size, d_model),
         device=hidden_states.device,
         dtype=hidden_states.dtype,
-    )
+    ).to(torch.float8_e4m3fn)
 
     w2s = torch.rand(
         (num_total_experts, d_model, shard_intermediate_size),
         device=hidden_states.device,
         dtype=hidden_states.dtype,
-    )
+    ).to(torch.float8_e4m3fn)
+
+    s = torch.rand(d_model,
+                   device=hidden_states.device,
+                   dtype=torch.float16)
+    s2 = torch.rand(shard_intermediate_size,
+                    device=hidden_states.device,
+                    dtype=torch.float16)
 
     gating_output = F.softmax(torch.rand(
         (num_calls, bs, num_total_experts),
@@ -165,6 +165,8 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
             hidden_states=hidden_states,
             w1=ws,
             w2=w2s,
+            s=s,
+            s2=s2,
             gating_output=gating_output[i],
             topk=2,
             renormalize=True,

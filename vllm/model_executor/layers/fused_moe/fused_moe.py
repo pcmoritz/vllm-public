@@ -21,6 +21,7 @@ def fused_moe_kernel(
     a_ptr,
     b_ptr,
     c_ptr,
+    s_ptr,
     topk_weights_ptr,
     sorted_token_ids_ptr,
     expert_ids_ptr,
@@ -110,6 +111,7 @@ def fused_moe_kernel(
     off_experts = tl.load(expert_ids_ptr + pid_m)
     b_ptrs = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
                                                 offs_bn[None, :] * stride_bn)
+    s_ptrs = s_ptr + offs_bn[None, :] * stride_bn
 
     # -----------------------------------------------------------
     # Iterate to compute a block of the C matrix.
@@ -128,8 +130,9 @@ def fused_moe_kernel(
         b = tl.load(b_ptrs,
                     mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
                     other=0.0)
+        s = tl.load(s_ptrs)
         # We accumulate along the K dimension.
-        accumulator = tl.dot(a, b, acc=accumulator, allow_tf32=True)
+        accumulator = tl.dot(a, (b / s).to(tl.float8e4nv), acc=accumulator, allow_tf32=True)
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_SIZE_K * stride_ak
         b_ptrs += BLOCK_SIZE_K * stride_bk
@@ -207,6 +210,7 @@ def moe_align_block_size(
 
 
 def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
+                            s: torch.Tensor,
                             topk_weights: torch.Tensor, topk_ids: torch.Tensor,
                             sorted_token_ids: torch.Tensor,
                             expert_ids: torch.Tensor,
@@ -223,6 +227,7 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
         A,
         B,
         C,
+        s,
         topk_weights,
         sorted_token_ids,
         expert_ids,
@@ -385,10 +390,10 @@ def fused_moe(
 
     intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
                                       device=hidden_states.device,
-                                      dtype=torch.float8_e4m3fn)
+                                      dtype=torch.float16)
     intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
-                                      dtype=torch.float8_e4m3fn)
+                                      dtype=torch.float16)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
                                       device=hidden_states.device,
                                       dtype=torch.float16)
@@ -396,17 +401,14 @@ def fused_moe(
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
-    hidden_states_scaled = hidden_states / s
-
-    invoke_fused_moe_kernel(hidden_states_scaled.to(dtype=torch.float8_e4m3fn),
-                            w1, intermediate_cache1,
+    invoke_fused_moe_kernel(hidden_states, w1, intermediate_cache1, s,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, False,
-                            topk_ids.shape[1], config, compute_type=tl.float8e4nv)
+                            topk_ids.shape[1], config, compute_type=tl.float16)
 
-    ops.scaled_silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N), s2)
+    ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
 
-    invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3,
+    invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3, s2,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, True, 1,
                             config, compute_type=tl.float16)

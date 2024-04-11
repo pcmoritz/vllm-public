@@ -383,6 +383,9 @@ def fused_moe(
                     'GROUP_SIZE_M': 1
                 }
 
+    intermediate_cache0 = torch.empty(hidden_states.shape,
+                                      device=hidden_states.device,
+                                      dtype=torch.float8_e4m3fn)
     intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
                                       device=hidden_states.device,
                                       dtype=torch.float8_e4m3fn)
@@ -396,18 +399,16 @@ def fused_moe(
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
-    hidden_states_scaled = hidden_states / s
+    ops.scaled_fp8_quant(intermediate_cache0, hidden_states, s)
 
-    invoke_fused_moe_kernel(hidden_states_scaled.to(dtype=torch.float8_e4m3fn),
-                            w1, intermediate_cache1,
+    invoke_fused_moe_kernel(intermediate_cache0, w1, intermediate_cache1,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, False,
                             topk_ids.shape[1], config, compute_type=tl.float8e4nv)
 
     ops.scaled_silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N), s2)
 
-    invoke_fused_moe_kernel(intermediate_cache2,
-                            w2, intermediate_cache3,
+    invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, True, 1,
                             config, compute_type=tl.float16)

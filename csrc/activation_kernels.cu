@@ -43,16 +43,15 @@ __device__ __forceinline__ T gelu_kernel(const T& x) {
 template<typename scalar_t>
 __global__ void scaled_silu_and_mul_kernel(
   scalar_t* __restrict__ out,
-  const scalar_t* __restrict__ input,
-  const scalar_t* __restrict__ scales,
+  const c10::Half* __restrict__ input,
+  const float* __restrict__ scales,
   const int d) {
   const int64_t token_idx = blockIdx.x;
   for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
     const float x = (float) input[token_idx * 2 * d + idx];
     const float y = (float) input[token_idx * 2 * d + d + idx];
-    const float s = (float) scales[idx];
-    float r = silu_kernel(x) * y / s;
-    out[token_idx * d + idx] = (scalar_t) r;
+    float r = silu_kernel(x) * y;
+    out[token_idx * d + idx] = (scalar_t) r * scales[0];
   }
 }
 
@@ -108,13 +107,13 @@ void scaled_silu_and_mul(
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   VLLM_DISPATCH_FLOATING_TYPES_FP8(
-    input.scalar_type(),
+    out.scalar_type(),
     "scaled_silu_and_mul_kernel",
     [&] {
       vllm::scaled_silu_and_mul_kernel<scalar_t><<<grid, block, 0, stream>>>(
         out.data_ptr<scalar_t>(),
-        input.data_ptr<scalar_t>(),
-        scales.data_ptr<scalar_t>(),
+        input.data_ptr<c10::Half>(),
+        scales.data_ptr<float>(),
         d);
       });
 }

@@ -140,7 +140,7 @@ def fused_moe_kernel(
                              other=0)
         accumulator = accumulator * moe_weight[:, None]
 
-    accumulator = accumulator.to(compute_type)
+    accumulator = accumulator.to(compute_type) * 2.0
     # -----------------------------------------------------------
     # Write back the block of the output
     offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
@@ -283,8 +283,10 @@ def fused_moe(
     hidden_states: torch.Tensor,
     w1: torch.Tensor,
     w2: torch.Tensor,
-    s: torch.Tensor,
-    s2: torch.Tensor,
+    w_scale: torch.Tensor,
+    w2_scale: torch.Tensor,
+    a_scale: torch.Tensor,
+    a2_scale: torch.Tensor,
     gating_output: torch.Tensor,
     topk: int,
     renormalize: bool,
@@ -388,7 +390,7 @@ def fused_moe(
                                       dtype=torch.float8_e4m3fn)
     intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
                                       device=hidden_states.device,
-                                      dtype=torch.float8_e4m3fn)
+                                      dtype=torch.float16)
     intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
                                       dtype=torch.float8_e4m3fn)
@@ -399,14 +401,14 @@ def fused_moe(
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
-    ops.scaled_fp8_quant(intermediate_cache0, hidden_states, s)
+    ops.scaled_fp8_quant(intermediate_cache0, hidden_states, a_scale)
 
     invoke_fused_moe_kernel(intermediate_cache0, w1, intermediate_cache1,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, False,
-                            topk_ids.shape[1], config, compute_type=tl.float8e4nv)
+                            topk_ids.shape[1], config, compute_type=tl.float16)
 
-    ops.scaled_silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N), s2)
+    ops.scaled_silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N), a2_scale)
 
     invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3,
                             topk_weights, topk_ids, sorted_token_ids,

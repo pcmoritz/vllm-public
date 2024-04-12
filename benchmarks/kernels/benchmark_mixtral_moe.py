@@ -41,14 +41,15 @@ def run_grid(bs, method):
             for block_size_k in [64, 128, 256]:
                 for group_size_m in [1, 16, 32, 64]:
                     for num_warps in [4, 8]:
-                        configs.append({
-                            "BLOCK_SIZE_M": block_size_m,
-                            "BLOCK_SIZE_N": block_size_n,
-                            "BLOCK_SIZE_K": block_size_k,
-                            "GROUP_SIZE_M": group_size_m,
-                            "num_warps": num_warps,
-                            "num_stages": 4,
-                        })
+                        for num_stages in [4]:
+                            configs.append({
+                                "BLOCK_SIZE_M": block_size_m,
+                                "BLOCK_SIZE_N": block_size_n,
+                                "BLOCK_SIZE_K": block_size_k,
+                                "GROUP_SIZE_M": group_size_m,
+                                "num_warps": num_warps,
+                                "num_stages": num_stages,
+                            })
 
     best_config = None
     best_time_us = 1e20

@@ -99,10 +99,14 @@ class MixtralMoE(nn.Module):
                         dtype=torch.float8_e4m3fn))
 
         # Scaling factors for fp8
-        self.w_scale = nn.Parameter(torch.tensor(1.0, device="cuda", dtype=torch.float32))
-        self.w2_scale = nn.Parameter(torch.tensor(1.0, device="cuda", dtype=torch.float32))
-        self.a_scale = nn.Parameter(torch.tensor(1.0, device="cuda", dtype=torch.float32))
-        self.a2_scale = nn.Parameter(torch.tensor(1.0, device="cuda", dtype=torch.float32))
+        self.w_scale = nn.Parameter(
+            torch.ones(self.num_total_experts, device="cuda", dtype=torch.float32))
+        self.w2_scale = nn.Parameter(
+            torch.ones(self.num_total_experts, device="cuda", dtype=torch.float32))
+        self.a_scale = nn.Parameter(
+            torch.ones(self.num_total_experts, device="cuda", dtype=torch.float32))
+        self.a2_scale = nn.Parameter(
+            torch.ones(self.num_total_experts, device="cuda", dtype=torch.float32))
 
         set_weight_attrs(self.w, {
             "weight_loader": self.weight_loader,
@@ -140,10 +144,10 @@ class MixtralMoE(nn.Module):
 
         # For loading scales
         if weight_name.endswith("scales.w1") or weight_name.endswith("scales.w2") or weight_name.endswith("scales.w3"):
-            param_data = loaded_weight
+            param_data[expert_id] = loaded_weight
             print("loaded scale", weight_name, loaded_weight.shape)
         if weight_name.endswith("scales.a1") or weight_name.endswith("scales.a2") or weight_name.endswith("scales.a3"):
-            param_data = loaded_weight
+            param_data[expert_id] = loaded_weight
             print("loaded scale", weight_name, loaded_weight.shape)
 
 
@@ -446,15 +450,17 @@ class MixtralForCausalLM(nn.Module):
             for weight_name in ["w1", "w2", "w3"]
         ] + [
             # These are the weight scales for the experts
-            # (param_name, weight_name, None)
+            # (param_name, weight_name, expert_id)
             ("w_scale" if weight_name in ["w1", "w3"] else "w2_scale",
-             f"scales.{weight_name}", None)
+             f"scales.{expert_id}.{weight_name}", expert_id)
+            for expert_id in range(self.config.num_local_experts)
             for weight_name in ["w1", "w2", "w3"]
         ] + [
             # These are the activation scales for the experts
-            # (param_name, weight_name, None)
+            # (param_name, weight_name, expert_id)
             ("a_scale" if activation_name in ["a1", "a3"] else "a2_scale",
-             f"scales.{activation_name}", None)
+             f"scales.{expert_id}.{activation_name}", expert_id)
+            for expert_id in range(self.config.num_local_experts)
             for activation_name in ["a1", "a2", "a3"]
         ]
 

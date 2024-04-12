@@ -113,7 +113,7 @@ def fused_moe_kernel(
     b_ptrs = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
                                                 offs_bn[None, :] * stride_bn)
 
-    w_scale = tl.load(w_scale_ptr)
+    w_scale = tl.load(w_scale_ptr + off_experts)
     a_scale = tl.load(a_scale_ptr)
 
     # -----------------------------------------------------------
@@ -409,16 +409,19 @@ def fused_moe(
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
-    ops.scaled_fp8_quant(intermediate_cache0, hidden_states, a_scale)
+    a_s = a_scale.max()
+    a2s = a2_scale.max()
 
-    invoke_fused_moe_kernel(intermediate_cache0, w1, intermediate_cache1, w_scale, a_scale,
+    ops.scaled_fp8_quant(intermediate_cache0, hidden_states, a_s)
+
+    invoke_fused_moe_kernel(intermediate_cache0, w1, intermediate_cache1, w_scale, a_s,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, False,
                             topk_ids.shape[1], config, compute_type=tl.float16)
 
-    ops.scaled_silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N), a2_scale)
+    ops.scaled_silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N), a2_s)
 
-    invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3, w2_scale, a2_scale,
+    invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3, w2_scale, a2_s,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, True, 1,
                             config, compute_type=tl.float16)

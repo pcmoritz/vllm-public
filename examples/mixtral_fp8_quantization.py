@@ -35,7 +35,7 @@ def rewrite_safetensors(name):
                 tensors[scale_name] = scale
                 tensors[k] = qtensor
                 activation_scale_name = "model.layers." + name_parts[2] + ".block_sparse_moe.scales." + name_parts[-2].replace("w", "a")
-                tensors[activation_scale_name] = activation_scale(activation_scales[k])
+                tensors[activation_scale_name] = activation_scale(activation_scales[k.removesuffix(".weight")])
     save_file(tensors, name)
 
 for i in range(1, 20):

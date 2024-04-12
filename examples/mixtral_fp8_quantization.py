@@ -29,12 +29,12 @@ def rewrite_safetensors(name):
             tensors[k] = f.get_tensor(k)
             if "w1" in k or "w2" in k or "w3" in k:
                 qtensor, scale = fp8_quantize(tensors[k])
-                name_parts = k.split(".")
-                scale_name = "model.layers." + name_parts[2] + ".block_sparse_moe.scales." + name_parts[-2]
+                scale_name = k.removesuffix(".weight").replace("experts", "scales")
                 print(f"scaling {k} with {scale_name}")
                 tensors[scale_name] = scale
                 tensors[k] = qtensor
-                activation_scale_name = "model.layers." + name_parts[2] + ".block_sparse_moe.scales." + name_parts[-2].replace("w", "a")
+                activation_scale_name = scale_name.replace("w", "a")
+                print(f"activation_scale_name = {activation_scale_name}")
                 tensors[activation_scale_name] = activation_scale(activation_scales[k.removesuffix(".weight")])
     save_file(tensors, name)
 

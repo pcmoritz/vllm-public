@@ -18,7 +18,7 @@ def fp8_quantize(weight, qdtype=torch.float8_e4m3fn):
 
 def activation_scale(activation, qdtype=torch.float8_e4m3fn):
     finfo = torch.finfo(qdtype)
-    return weight.abs().max().clamp(min=1e-12) / finfo.max
+    return activation.abs().max().clamp(min=1e-12) / finfo.max
 
 activation_scales = torch.load("/home/ray/default/mixtral_scales.pth")
 

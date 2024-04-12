@@ -50,8 +50,8 @@ __global__ void scaled_silu_and_mul_kernel(
   for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
     const float x = (float) input[token_idx * 2 * d + idx];
     const float y = (float) input[token_idx * 2 * d + d + idx];
-    float r = silu_kernel(x) * y;
-    out[token_idx * d + idx] = (scalar_t) r * scales[0];
+    float r = silu_kernel(x) * y / scales[0];
+    out[token_idx * d + idx] = (scalar_t) r;
   }
 }
 

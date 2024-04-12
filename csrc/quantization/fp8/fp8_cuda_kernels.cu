@@ -17,8 +17,8 @@ __global__ void scaled_fp8_quant_kernel(
   const int d) {
   const int64_t token_idx = blockIdx.x;
   for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-    const scalar_t x = input[token_idx * d + idx];
-    out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(x * scales[0]);
+    const scalar_t x = input[token_idx * d + idx] / scales[0];
+    out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(x);
   }
 }
 

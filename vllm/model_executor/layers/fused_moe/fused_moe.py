@@ -410,7 +410,7 @@ def fused_moe(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
     a_s = a_scale.max()
-    a2s = a2_scale.max()
+    a2_s = a2_scale.max()
 
     ops.scaled_fp8_quant(intermediate_cache0, hidden_states, a_s)
 

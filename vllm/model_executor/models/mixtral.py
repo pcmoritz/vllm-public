@@ -102,7 +102,7 @@ class MixtralMoE(nn.Module):
         self.s = nn.Parameter(
             torch.empty(self.hidden_size,
                         device="cuda",
-                        dtype=torch.float16))
+                        dtype=torch.float8_e4m3fn))
         self.s2 = nn.Parameter(
             torch.empty(self.intermediate_size,
                         device="cuda",

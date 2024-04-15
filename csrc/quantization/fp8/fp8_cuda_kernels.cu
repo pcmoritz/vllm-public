@@ -13,12 +13,12 @@ template<typename scalar_t>
 __global__ void scaled_fp8_quant_kernel(
   c10::Float8_e4m3fn* __restrict__ out,
   const scalar_t* __restrict__ input,
-  const scalar_t* __restrict__ scales,
+  const c10::Float8_e4m3fn* __restrict__ scales,
   const int d) {
   const int64_t token_idx = blockIdx.x;
   for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
     const scalar_t x = input[token_idx * d + idx];
-    const scalar_t s = scales[idx];
+    const scalar_t s = static_cast<scalar_t>(scales[idx]);
     const scalar_t r = x / s;
     out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(r);
   }
@@ -44,7 +44,7 @@ void scaled_fp8_quant(
       vllm::scaled_fp8_quant_kernel<scalar_t><<<grid, block, 0, stream>>>(
         out.data_ptr<c10::Float8_e4m3fn>(),
         input.data_ptr<scalar_t>(),
-        scales.data_ptr<scalar_t>(),
+        scales.data_ptr<c10::Float8_e4m3fn>(),
         d);
       });
 }

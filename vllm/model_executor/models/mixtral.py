@@ -104,9 +104,9 @@ class MixtralMoE(nn.Module):
         self.w2_scale = nn.Parameter(
             torch.ones(self.num_total_experts, device="cuda", dtype=torch.float32))
         self.a_scale = nn.Parameter(
-            torch.ones(self.num_total_experts, device="cuda", dtype=torch.float32))
+            torch.ones(1, device="cuda", dtype=torch.float32))
         self.a2_scale = nn.Parameter(
-            torch.ones(self.num_total_experts, device="cuda", dtype=torch.float32))
+            torch.ones(1, device="cuda", dtype=torch.float32))
 
         set_weight_attrs(self.w, {
             "weight_loader": self.weight_loader,
@@ -129,7 +129,7 @@ class MixtralMoE(nn.Module):
         })
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
-                      weight_name: str, expert_id: int):
+                      weight_name: str, expert_id: Optional[int]):
         tp_rank = get_tensor_model_parallel_rank()
         param_data = param.data
         shard_size = self.intermediate_size
@@ -143,8 +143,11 @@ class MixtralMoE(nn.Module):
             param_data[expert_id, :, :] = loaded_weight[:, shard]
 
         # For loading scales
-        if "scales" in weight_name:
+        if "scales" in weight_name and expert_id:
             param_data[expert_id] = loaded_weight
+            print("loaded scale", weight_name, loaded_weight.shape)
+        if "scales" in weight_name:
+            param_data[:] = loaded_weight
             print("loaded scale", weight_name, loaded_weight.shape)
 
 
@@ -454,10 +457,9 @@ class MixtralForCausalLM(nn.Module):
             for weight_name in ["w1", "w2", "w3"]
         ] + [
             # These are the activation scales for the experts
-            # (param_name, weight_name, expert_id)
+            # (param_name, weight_name, None)
             ("a_scale" if activation_name in ["a1", "a3"] else "a2_scale",
-             f"scales.{expert_id}.{activation_name}", expert_id)
-            for expert_id in range(self.config.num_local_experts)
+             f"scales.{activation_name}", None)
             for activation_name in ["a1", "a2", "a3"]
         ]
 

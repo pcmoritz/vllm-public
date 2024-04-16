@@ -146,7 +146,7 @@ class MixtralMoE(nn.Module):
         if "scales" in weight_name and expert_id:
             param_data[expert_id] = loaded_weight
             print("loaded scale", weight_name, loaded_weight.shape)
-        if "scales" in weight_name:
+        if "experts.a" in weight_name:
             param_data[:] = loaded_weight
             print("loaded scale", weight_name, loaded_weight.shape)
 

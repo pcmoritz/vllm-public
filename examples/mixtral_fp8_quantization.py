@@ -1,3 +1,4 @@
+import numpy
 from safetensors import safe_open
 from safetensors.torch import save_file
 import torch
@@ -16,11 +17,8 @@ def fp8_quantize(weight, qdtype=torch.float8_e4m3fn):
     scale = scale.float().reciprocal()
     return qweight, scale
 
-def activation_scale(activation, qdtype=torch.float8_e4m3fn):
-    finfo = torch.finfo(qdtype)
-    return activation.abs().max().clamp(min=1e-12) / finfo.max
-
-activation_scales = torch.load("/home/ray/default/mixtral_scales.pth")
+scales_file = numpy.load("/tmp/scales.npz")
+activation_scales = {"a1": scales_file['arr_0'], "a2": scales_file['arr_1'], "a3": scales_file['arr_0']}
 
 def rewrite_safetensors(name):
     tensors = {}
@@ -33,9 +31,11 @@ def rewrite_safetensors(name):
                 print(f"scaling {k} with {scale_name}")
                 tensors[scale_name] = scale
                 tensors[k] = qtensor
-                activation_scale_name = scale_name.replace("w", "a")
+                activation_name_parts = k.removesuffix(".weight").replace("w", "a").split(".")
+                del activation_name_parts[-2]
+                activation_scale_name = ".".join(activation_name_parts)
                 print(f"activation_scale_name = {activation_scale_name}")
-                tensors[activation_scale_name] = activation_scale(activation_scales[k.removesuffix(".weight")])
+                tensors[activation_scale_name] = torch.tensor(activation_scales[activation_name_parts[-1]][int(activation_name_parts[2])])
     save_file(tensors, name)
 
 for i in range(1, 20):

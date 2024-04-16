@@ -287,6 +287,13 @@ def get_moe_configs(E: int, N: int) -> Optional[Dict[int, Any]]:
     return None
 
 
+# @torch.compile
+def get_scale(x):
+    # return x.abs().max().clamp(min=1e-12) / torch.finfo(torch.float8_e4m3fn).max
+    min_, max_ = torch.aminmax(x)
+    return torch.maximum(min_.abs(), max_.abs()) / torch.finfo(torch.float8_e4m3fn).max
+
+
 def fused_moe(
     hidden_states: torch.Tensor,
     w1: torch.Tensor,
@@ -401,7 +408,10 @@ def fused_moe(
                                       dtype=torch.float16)
     intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
-                                      dtype=torch.float8_e4m3fn)
+                                      dtype=torch.float16)
+    intermediate_cache2_scaled = torch.empty((M * topk_ids.shape[1], N // 2),
+                                             device=hidden_states.device,
+                                             dtype=torch.float8_e4m3fn)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
                                       device=hidden_states.device,
                                       dtype=torch.float16)
@@ -414,9 +424,11 @@ def fused_moe(
     # print("a_scale", a_scale)
     # print("a2_scale", a2_scale)
 
-    a_s = 2.0 * a_scale.max()
+    a_s = get_scale(hidden_states)
+
+    # a_s = 2.0 * a_scale.max()
     # a_s = a_scale.max()
-    a2_s = 2.0 * a2_scale.max()
+    # a2_s = 2.0 * a2_scale.max()
     # a2_s = a2_scale.max()
 
     ops.scaled_fp8_quant(intermediate_cache0, hidden_states, a_s)
@@ -429,12 +441,17 @@ def fused_moe(
                             expert_ids, num_tokens_post_padded, False,
                             topk_ids.shape[1], config, compute_type=tl.float16)
 
-    ops.scaled_silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N), a2_s)
+    ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
+
+    a2_s = get_scale(intermediate_cache2)
+    # a2_s = torch.ones((1,), device=hidden_states.device, dtype=torch.float16)
+
+    ops.scaled_fp8_quant(intermediate_cache2_scaled, intermediate_cache2, a2_s)
 
     # print("intermediate_cache1", intermediate_cache1.abs().max())
     # print("intermediate_cache2", intermediate_cache2.to(torch.float16).abs().max(), "w2", w2.to(torch.float16).abs().max())
 
-    invoke_fused_moe_kernel(intermediate_cache2, w2, intermediate_cache3, w2_scale, a2_s,
+    invoke_fused_moe_kernel(intermediate_cache2_scaled, w2, intermediate_cache3, w2_scale, a2_s,
                             topk_weights, topk_ids, sorted_token_ids,
                             expert_ids, num_tokens_post_padded, True, 1,
                             config, compute_type=tl.float16)

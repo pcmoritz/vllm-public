@@ -44,14 +44,14 @@ template<typename scalar_t>
 __global__ void scaled_silu_and_mul_kernel(
   scalar_t* __restrict__ out,
   const c10::Half* __restrict__ input,
-  const c10::Half* __restrict__ scales,
+  const float* __restrict__ scales,
   const int d) {
   const int64_t token_idx = blockIdx.x;
   for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
     const float x = (float) input[token_idx * 2 * d + idx];
     const float y = (float) input[token_idx * 2 * d + d + idx];
-    float r = silu_kernel(x) * y / scales[0];
-    out[token_idx * d + idx] = (scalar_t) r;
+    float r = silu_kernel(x) * y;
+    out[token_idx * d + idx] = (scalar_t) (r / scales[0]);
   }
 }
 
@@ -113,7 +113,7 @@ void scaled_silu_and_mul(
       vllm::scaled_silu_and_mul_kernel<scalar_t><<<grid, block, 0, stream>>>(
         out.data_ptr<scalar_t>(),
         input.data_ptr<c10::Half>(),
-        scales.data_ptr<c10::Half>(),
+        scales.data_ptr<float>(),
         d);
       });
 }

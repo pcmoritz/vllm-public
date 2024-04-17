@@ -129,7 +129,7 @@ class MixtralMoE(nn.Module):
         })
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor,
-                      weight_name: str, expert_id: Optional[int]):
+                      weight_name: str, expert_id: int):
         tp_rank = get_tensor_model_parallel_rank()
         param_data = param.data
         shard_size = self.intermediate_size
@@ -143,10 +143,10 @@ class MixtralMoE(nn.Module):
             param_data[expert_id, :, :] = loaded_weight[:, shard]
 
         # For loading scales
-        if "scales" in weight_name and expert_id:
+        if "scales" in weight_name:
             param_data[expert_id] = loaded_weight
             print("loaded scale", weight_name, loaded_weight.shape)
-        if "experts.a" in weight_name:
+        if "a1" in weight_name or "a2" in weight_name or "a3" in weight_name:
             param_data[:] = loaded_weight
             print("loaded scale", weight_name, loaded_weight.shape)
 
@@ -457,7 +457,7 @@ class MixtralForCausalLM(nn.Module):
             for weight_name in ["w1", "w2", "w3"]
         ] + [
             # These are the activation scales for the experts
-            # (param_name, weight_name, None)
+            # (param_name, weight_name, expert_id)
             ("a_scale" if activation_name in ["a1", "a3"] else "a2_scale",
              f"experts.{activation_name}", None)
             for activation_name in ["a1", "a2", "a3"]

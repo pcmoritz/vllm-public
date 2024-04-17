@@ -409,12 +409,12 @@ def fused_moe(
     intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
                                       device=hidden_states.device,
                                       dtype=torch.float16)
+    # intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
+    #                                   device=hidden_states.device,
+    #                                   dtype=torch.float16)
     intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
-                                      device=hidden_states.device,
-                                      dtype=torch.float8_e4m3fn)
-    # intermediate_cache2_scaled = torch.empty((M * topk_ids.shape[1], N // 2),
-    #                                          device=hidden_states.device,
-    #                                          dtype=torch.float8_e4m3fn)
+                                             device=hidden_states.device,
+                                             dtype=torch.float8_e4m3fn)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
                                       device=hidden_states.device,
                                       dtype=torch.float16)

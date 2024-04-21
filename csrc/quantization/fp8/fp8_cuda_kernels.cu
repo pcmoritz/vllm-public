@@ -67,7 +67,7 @@ __global__ void scaled_fp8_quant_kernel(
   c10::Float8_e4m3fn* __restrict__ out,
   const scalar_t* __restrict__ input,
   float* __restrict__ scale,
-  int64_t num_elems) {
+  const int64_t num_elems) {
   cg::grid_group grid = cg::this_grid();
 
   segmented_max_reduction(scale, input, num_elems);
@@ -82,6 +82,23 @@ __global__ void scaled_fp8_quant_kernel(
   }
 }
 
+template<typename scalar_t>
+__global__ void fp8_silu_and_mul_kernel(
+  c10::Float8_e4m3fn* __restrict__ out,
+  const scalar_t* __restrict__ input,
+  const float* __restrict__ scale,
+  const int d,
+  const int64_t num_tokens) {
+  for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
+    for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
+      const float x = (float) input[token_idx * 2 * d + idx];
+      const float y = (float) input[token_idx * 2 * d + d + idx];
+      float r = silu_kernel(x) * y;
+      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(r / *scale);
+    }
+  }
+}
+
 } // namespace vllm
 
 void scaled_fp8_quant(
@@ -89,7 +106,6 @@ void scaled_fp8_quant(
   torch::Tensor& input,    // [..., d]
   torch::Tensor& scale)   // [1]
 {
-  int64_t num_tokens = input.numel() / input.size(-1);
   int64_t num_elems = input.numel();
   dim3 grid(128);
   dim3 block(1024);
@@ -106,6 +122,32 @@ void scaled_fp8_quant(
                             (void *)&scale_ptr, (void *)&num_elems};
       AT_CUDA_CHECK(
         cudaLaunchCooperativeKernel((void *)vllm::scaled_fp8_quant_kernel<scalar_t>,
+          grid, block, kernelArgs, 0, stream));
+      });
+}
+
+void fp8_silu_and_mul_kernel(
+  torch::Tensor& out,      // [..., d]
+  torch::Tensor& input,    // [..., 2 * d]
+  torch::Tensor& scale)   // [1]
+{
+  int d = input.size(-1) / 2;
+  int64_t num_tokens = input.numel() / input.size(-1);
+  dim3 grid(128);
+  dim3 block(1024);
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  VLLM_DISPATCH_FLOATING_TYPES(
+    input.scalar_type(),
+    "fp8_silu_and_mul_kernel_kernel",
+    [&] {
+      c10::Float8_e4m3fn* out_ptr = out.data_ptr<c10::Float8_e4m3fn>();
+      scalar_t* input_ptr = input.data_ptr<scalar_t>();
+      float* scale_ptr = scale.data_ptr<float>();
+      void *kernelArgs[] = {(void *)&out_ptr, (void *)&input_ptr,
+                            (void *)&scale_ptr, (void*)d, (void *)&num_tokens};
+      AT_CUDA_CHECK(
+        cudaLaunchCooperativeKernel((void *)vllm::fp8_silu_and_mul_kernel<scalar_t>,
           grid, block, kernelArgs, 0, stream));
       });
 }

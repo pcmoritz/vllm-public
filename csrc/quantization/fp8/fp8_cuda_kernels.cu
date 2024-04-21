@@ -66,7 +66,7 @@ template<typename scalar_t>
 __global__ void scaled_fp8_quant_kernel(
   c10::Float8_e4m3fn* __restrict__ out,
   const scalar_t* __restrict__ input,
-  const float* __restrict__ scale,
+  float* __restrict__ scale,
   int64_t num_elems) {
   cg::grid_group grid = cg::this_grid();
 

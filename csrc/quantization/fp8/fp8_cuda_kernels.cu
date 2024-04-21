@@ -1,11 +1,14 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <torch/extension.h>
 #include <c10/cuda/CUDAGuard.h>
+#include <cooperative_groups.h>
 
 #include <cmath>
 
 #include "cuda_compat.h"
 #include "dispatch_utils.h"
+
+namespace cg = cooperative_groups;
 
 namespace vllm {
 
@@ -24,7 +27,7 @@ __device__ __forceinline__ float atomicMaxFloat(float* addr, float value) {
 // a value <= 0.0 and we need to wait for all thread blocks to
 // finish before consuming *scale.
 template<typename scalar_t>
-__global__ void segmented_max_reduction(
+__device__ void segmented_max_reduction(
   float* __restrict__ scale,
   const scalar_t* __restrict__ input,
   int64_t num_elems) {
@@ -65,6 +68,13 @@ __global__ void scaled_fp8_quant_kernel(
   const scalar_t* __restrict__ input,
   const float* __restrict__ scale,
   int64_t num_elems) {
+  cg::grid_group grid = cg::this_grid();
+
+  segmented_max_reduction(scale, input, num_elements);
+
+  // Synchronize accross the grid
+  cg::sync(grid);
+
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   while (i < num_elems) {
     out[i] = static_cast<c10::Float8_e4m3fn>(input[i] / *scale);
@@ -81,7 +91,7 @@ void scaled_fp8_quant(
 {
   int64_t num_tokens = input.numel() / input.size(-1);
   int64_t num_elems = input.numel();
-  dim3 grid(num_tokens);
+  dim3 grid(128);
   dim3 block(1024);
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -89,15 +99,14 @@ void scaled_fp8_quant(
     input.scalar_type(),
     "scaled_fp8_quant_kernel",
     [&] {
-      vllm::segmented_max_reduction<scalar_t><<<grid, block, 0, stream>>>(
-        scale.data_ptr<float>(),
-        input.data_ptr<scalar_t>(),
-        num_elems);
-      vllm::scaled_fp8_quant_kernel<scalar_t><<<grid, block, 0, stream>>>(
-        out.data_ptr<c10::Float8_e4m3fn>(),
-        input.data_ptr<scalar_t>(),
-        scale.data_ptr<float>(),
-        num_elems);
+      c10::Float8_e4m3fn* out_ptr = out.data_ptr<c10::Float8_e4m3fn>();
+      scalar_t* input_ptr = input.data_ptr<scalar_t>();
+      float* scale_ptr = scale.data_ptr<float>();
+      void *kernelArgs[] = {(void *)&out_ptr, (void *)&input_ptr,
+                            (void *)&scale_ptr, (void *)&num_elems};
+      checkCudaErrors(
+        cudaLaunchCooperativeKernel((void *)vllm::scaled_fp8_quant_kernel<scalar_t>,
+          grid, block, kernelArgs, 0, stream));
       });
 }
 

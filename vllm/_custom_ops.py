@@ -161,6 +161,10 @@ def scaled_fp8_quant(input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     return output, scale
 
 
+def fp8_silu_and_mul_kernel(out: torch.Tensor, input: torch.Tensor, scale: torch.Tensor):
+    return vllm_ops.fp8_silu_and_mul_kernel(out, input, scale)
+
+
 # moe
 def moe_align_block_size(topk_ids: torch.Tensor, num_experts: int,
                          block_size: int, sorted_token_ids: torch.Tensor,

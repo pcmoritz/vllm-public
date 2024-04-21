@@ -70,7 +70,7 @@ __global__ void scaled_fp8_quant_kernel(
   int64_t num_elems) {
   cg::grid_group grid = cg::this_grid();
 
-  segmented_max_reduction(scale, input, num_elements);
+  segmented_max_reduction(scale, input, num_elems);
 
   // Synchronize accross the grid
   cg::sync(grid);
@@ -104,7 +104,7 @@ void scaled_fp8_quant(
       float* scale_ptr = scale.data_ptr<float>();
       void *kernelArgs[] = {(void *)&out_ptr, (void *)&input_ptr,
                             (void *)&scale_ptr, (void *)&num_elems};
-      checkCudaErrors(
+      AT_CUDA_CHECK(
         cudaLaunchCooperativeKernel((void *)vllm::scaled_fp8_quant_kernel<scalar_t>,
           grid, block, kernelArgs, 0, stream));
       });

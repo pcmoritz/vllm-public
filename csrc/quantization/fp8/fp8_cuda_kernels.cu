@@ -95,12 +95,45 @@ __global__ void fp8_silu_and_mul_kernel(
   const float* __restrict__ scale,
   const int d,
   const int64_t num_tokens) {
+  cg::grid_group grid = cg::this_grid();
+
+  __shared__ scalar_t results[d];
+  __shared__ float cache[1024];
+
   for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
       const float x = (float) input[token_idx * 2 * d + idx];
       const float y = (float) input[token_idx * 2 * d + d + idx];
       float r = silu_kernel(x) * y;
-      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(r / *scale);
+      results[idx] = static_cast<scalar_t>(r);
+      cache[threadIdx.x] = max(cache[threadIdx.x], fabs(r));
+    }
+  }
+
+  __syncthreads();
+
+  // Now perform parallel reduction within the thread block
+  int ib = blockDim.x / 2;
+  while (ib != 0) {
+    if (threadIdx.x < ib && cache[threadIdx.x + ib] > cache[threadIdx.x]) {
+        cache[threadIdx.x] = cache[threadIdx.x + ib];
+    }
+    __syncthreads();
+    ib /= 2;
+  }
+  // Finally, since cache[0] contains the maximum for this thread block,
+  // atomically write the max to the target location
+  if (threadIdx.x == 0) {
+    atomicMaxFloat(scale, cache[0] / std::numeric_limits<c10::Float8_e4m3fn>::max());
+  }
+
+  // Synchronize accross the grid
+  cg::sync(grid);
+
+  // Convert results to FP8 with scaling
+  for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
+    for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
+      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(results[idx] / *scale);
     }
   }
 }

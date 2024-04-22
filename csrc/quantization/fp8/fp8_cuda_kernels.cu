@@ -82,6 +82,37 @@ __global__ void scaled_fp8_quant_kernel(
   }
 }
 
+// See https://leimao.github.io/blog/CUDA-Shared-Memory-Templated-Kernel/
+template <typename T>
+struct SharedMemory
+{
+    __device__ T* get()
+    {
+        extern __device__ void Error_UnsupportedType(); // Ensure that we won't compile any un-specialized types
+        Error_UnsupportedType();
+        return (T*)0;
+    }
+};
+
+template <>
+struct SharedMemory <float>
+{
+    __device__ float* get() { extern __shared__ float data[]; return data; }
+};
+
+template <>
+struct SharedMemory <c10::Half>
+{
+    __device__ c10::Half* get() { extern __shared__ c10::Half data[]; return data; }
+};
+
+template <>
+struct SharedMemory <c10::BFloat16>
+{
+    __device__ c10::BFloat16* get() { extern __shared__ c10::BFloat16 data[]; return data; }
+};
+
+
 template<typename T>
 __device__ __forceinline__ T silu_kernel(const T& x) {
   // x * sigmoid(x)
@@ -97,7 +128,8 @@ __global__ void fp8_silu_and_mul_kernel(
   const int64_t num_tokens) {
   cg::grid_group grid = cg::this_grid();
 
-  extern __shared__ scalar_t output[];
+  SharedMemory<scalar_t> smem;
+  scalar_t* result = smem.get();
   __shared__ float cache[1024];
 
   for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
@@ -105,7 +137,7 @@ __global__ void fp8_silu_and_mul_kernel(
       const float x = (float) input[token_idx * 2 * d + idx];
       const float y = (float) input[token_idx * 2 * d + d + idx];
       float r = silu_kernel(x) * y;
-      output[idx] = static_cast<scalar_t>(r);
+      result[idx] = static_cast<scalar_t>(r);
       cache[threadIdx.x] = max(cache[threadIdx.x], fabs(r));
     }
   }
@@ -133,7 +165,7 @@ __global__ void fp8_silu_and_mul_kernel(
   // Convert results to FP8 with scaling
   for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(output[idx] / *scale);
+      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(result[idx] / *scale);
     }
   }
 }

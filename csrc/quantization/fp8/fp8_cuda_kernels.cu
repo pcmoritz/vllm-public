@@ -97,7 +97,7 @@ __global__ void fp8_silu_and_mul_kernel(
   const int64_t num_tokens) {
   cg::grid_group grid = cg::this_grid();
 
-  extern __shared__ scalar_t results[];
+  extern __shared__ scalar_t output[];
   __shared__ float cache[1024];
 
   for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
@@ -105,7 +105,7 @@ __global__ void fp8_silu_and_mul_kernel(
       const float x = (float) input[token_idx * 2 * d + idx];
       const float y = (float) input[token_idx * 2 * d + d + idx];
       float r = silu_kernel(x) * y;
-      results[idx] = static_cast<scalar_t>(r);
+      output[idx] = static_cast<scalar_t>(r);
       cache[threadIdx.x] = max(cache[threadIdx.x], fabs(r));
     }
   }
@@ -133,7 +133,7 @@ __global__ void fp8_silu_and_mul_kernel(
   // Convert results to FP8 with scaling
   for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(results[idx] / *scale);
+      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(output[idx] / *scale);
     }
   }
 }

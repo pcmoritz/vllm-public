@@ -161,8 +161,8 @@ def scaled_fp8_quant(input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     return output, scale
 
 
-def fp8_silu_and_mul_kernel(out: torch.Tensor, input: torch.Tensor, scale: torch.Tensor):
-    return vllm_ops.fp8_silu_and_mul_kernel(out, input, scale)
+def fp8_silu_and_mul_kernel(out: torch.Tensor, input: torch.Tensor, scale: torch.Tensor, block_size_m: torch.Tensor):
+    return vllm_ops.fp8_silu_and_mul_kernel(out, input, scale, block_size_m)
 
 
 # moe

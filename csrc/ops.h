@@ -139,7 +139,8 @@ void scaled_fp8_quant(
 void fp8_silu_and_mul_kernel(
   torch::Tensor& out,
   torch::Tensor& input,
-  torch::Tensor& scale);
+  torch::Tensor& scale,
+  torch::Tensor& block_size_m);
 
 void moe_align_block_size(
   torch::Tensor topk_ids,

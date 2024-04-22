@@ -10,6 +10,8 @@
 
 namespace cg = cooperative_groups;
 
+#define CEILDIV(x,y) (((x) + (y) - 1) / (y))
+
 namespace vllm {
 
 __device__ __forceinline__ float atomicMaxFloat(float* addr, float value) {
@@ -123,22 +125,23 @@ template<typename scalar_t>
 __global__ void fp8_silu_and_mul_kernel(
   c10::Float8_e4m3fn* __restrict__ out,
   const scalar_t* __restrict__ input,
-  float* __restrict__ scale,
+  float* __restrict__ scales,
   const int d,
-  const int64_t num_tokens) {
-  cg::grid_group grid = cg::this_grid();
-
+  const int64_t num_tokens,
+  const int64_t block_size_m) {
   SharedMemory<scalar_t> smem;
+  // FIXME: We actually don't need all this shared memory
   scalar_t* result = smem.get();
   __shared__ float cache[1024];
 
-  for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
+  int64_t max_token_idx = min((blockIdx.x + 1) * block_size_m, num_tokens);
+  for (int64_t token_idx = blockIdx.x * block_size_m; token_idx < max_token_idx; ++token_idx) {
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
       const float x = (float) input[token_idx * 2 * d + idx];
       const float y = (float) input[token_idx * 2 * d + d + idx];
       float r = silu_kernel(x) * y;
-      result[idx] = static_cast<scalar_t>(r);
       cache[threadIdx.x] = max(cache[threadIdx.x], fabs(r));
+      result[idx] = static_cast<scalar_t>(r);
     }
   }
 
@@ -153,19 +156,16 @@ __global__ void fp8_silu_and_mul_kernel(
     __syncthreads();
     ib /= 2;
   }
-  // Finally, since cache[0] contains the maximum for this thread block,
-  // atomically write the max to the target location
-  if (threadIdx.x == 0) {
-    atomicMaxFloat(scale, cache[0] / std::numeric_limits<c10::Float8_e4m3fn>::max());
-  }
-
-  // Synchronize accross the grid
-  cg::sync(grid);
+  // cache[0] contains the maximum for this thread block
+  float scale = cache[0] / std::numeric_limits<c10::Float8_e4m3fn>::max();
 
   // Convert results to FP8 with scaling
   for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(result[idx] / *scale);
+      if (threadIdx.x == 0) {
+        scales[token_idx] = scale;
+      }
+      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(result[idx] / scale);
     }
   }
 }
@@ -200,11 +200,13 @@ void scaled_fp8_quant(
 void fp8_silu_and_mul_kernel(
   torch::Tensor& out,      // [..., d]
   torch::Tensor& input,    // [..., 2 * d]
-  torch::Tensor& scale)   // [1]
+  torch::Tensor& scales,    // [BLOCK_SIZE_M]
+  torch::Tensor& block_size_m)
 {
   int d = input.size(-1) / 2;
   int64_t num_tokens = input.numel() / input.size(-1);
-  dim3 grid(128);
+  int64_t bs_m = *block_size_m.data_ptr<int64_t>();
+  dim3 grid(CEILDIV(num_tokens, bs_m));
   dim3 block(1024);
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -212,14 +214,13 @@ void fp8_silu_and_mul_kernel(
     input.scalar_type(),
     "fp8_silu_and_mul_kernel_kernel",
     [&] {
-      c10::Float8_e4m3fn* out_ptr = out.data_ptr<c10::Float8_e4m3fn>();
-      scalar_t* input_ptr = input.data_ptr<scalar_t>();
-      float* scale_ptr = scale.data_ptr<float>();
-      void *kernelArgs[] = {(void *)&out_ptr, (void *)&input_ptr,
-                            (void *)&scale_ptr, (void*)&d, (void *)&num_tokens};
-      AT_CUDA_CHECK(
-        cudaLaunchCooperativeKernel((void *)vllm::fp8_silu_and_mul_kernel<scalar_t>,
-          grid, block, kernelArgs, d * sizeof(scalar_t), stream));
+      vllm::scaled_fp8_quant_kernel<scalar_t><<<grid, block, 0, stream>>>(
+        out.data_ptr<c10::Float8_e4m3fn>(),
+        input.data_ptr<scalar_t>(),
+        scales.data_ptr<float>(),
+        d,
+        num_elems,
+        bs_m);
       });
 }
 

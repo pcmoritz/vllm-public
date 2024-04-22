@@ -68,7 +68,7 @@ class MixtralMoE(nn.Module):
         intermediate_size: int,
         params_dtype: Optional[torch.dtype] = None,
         tp_size: Optional[int] = None,
-        use_fp8: bool = True,
+        linear_method: Optional[LinearMethodBase] = None,
     ):
         super().__init__()
         self.tp_size = tp_size or get_tensor_model_parallel_world_size()
@@ -76,7 +76,9 @@ class MixtralMoE(nn.Module):
         self.top_k = top_k
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size // self.tp_size
-        self.use_fp8 = use_fp8
+        # FIXME(pcmoritz): Make this more general to support different
+        # quantization schemes
+        self.use_fp8 = isinstance(linear_method, Fp8LinearMethod)
 
         if params_dtype is None:
             params_dtype = torch.get_default_dtype()
@@ -101,7 +103,8 @@ class MixtralMoE(nn.Module):
                         device="cuda",
                         dtype=self.params_dtype))
 
-        # Scaling factors for fp8 weights
+        # Scaling factors for fp8 weights. If fp8 is not used, these parameters
+        # are 1.0 so no rescaling will happen.
         self.ws_scale = nn.Parameter(torch.ones(self.num_total_experts,
                                                 device="cuda",
                                                 dtype=torch.float32),
@@ -152,13 +155,13 @@ class MixtralMoE(nn.Module):
         final_hidden_states = fused_moe(hidden_states,
                                         self.ws,
                                         self.w2s,
-                                        self.ws_scale,
-                                        self.w2s_scale,
                                         router_logits,
                                         self.top_k,
                                         renormalize=True,
                                         inplace=True,
-                                        use_fp8=self.use_fp8)
+                                        use_fp8=self.use_fp8,
+                                        w1_scale=self.ws_scale,
+                                        w2_scale=self.w2s_scale)
 
         if self.tp_size > 1:
             final_hidden_states = tensor_model_parallel_all_reduce(
@@ -201,8 +204,8 @@ class MixtralAttention(nn.Module):
         self.sliding_window = sliding_window
 
         if isinstance(linear_method, Fp8LinearMethod):
-            # If we are using FP8, we currently do not want to
-            # quantize the attention layers until we improve
+            # FIXME(pcmoritz): If we are using FP8, we currently do
+            # not want to quantize the attention layers until we improve
             # the performance and make sure the accuracy is good.
             linear_method = None
 
@@ -274,7 +277,7 @@ class MixtralDecoderLayer(nn.Module):
             top_k=config.num_experts_per_tok,
             hidden_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
-            use_fp8=isinstance(linear_method, Fp8LinearMethod))
+            linear_method=linear_method)
         self.input_layernorm = RMSNorm(config.hidden_size,
                                        eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.hidden_size,

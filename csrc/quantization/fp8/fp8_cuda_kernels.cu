@@ -219,7 +219,7 @@ void fp8_silu_and_mul_kernel(
         input.data_ptr<scalar_t>(),
         scales.data_ptr<float>(),
         d,
-        num_elems,
+        num_tokens,
         bs_m);
       });
 }

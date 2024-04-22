@@ -97,7 +97,7 @@ __global__ void fp8_silu_and_mul_kernel(
   const int64_t num_tokens) {
   cg::grid_group grid = cg::this_grid();
 
-  __shared__ scalar_t results[d];
+  extern __shared__ scalar_t results[];
   __shared__ float cache[1024];
 
   for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
@@ -187,7 +187,7 @@ void fp8_silu_and_mul_kernel(
                             (void *)&scale_ptr, (void*)d, (void *)&num_tokens};
       AT_CUDA_CHECK(
         cudaLaunchCooperativeKernel((void *)vllm::fp8_silu_and_mul_kernel<scalar_t>,
-          grid, block, kernelArgs, 0, stream));
+          grid, block, kernelArgs, d * sizeof(scalar_t), stream));
       });
 }
 

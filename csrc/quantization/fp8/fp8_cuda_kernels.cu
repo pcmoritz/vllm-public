@@ -92,7 +92,7 @@ template<typename scalar_t>
 __global__ void fp8_silu_and_mul_kernel(
   c10::Float8_e4m3fn* __restrict__ out,
   const scalar_t* __restrict__ input,
-  const float* __restrict__ scale,
+  float* __restrict__ scale,
   const int d,
   const int64_t num_tokens) {
   cg::grid_group grid = cg::this_grid();

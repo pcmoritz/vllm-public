@@ -216,7 +216,7 @@ void fp8_silu_and_mul_kernel(
       scalar_t* input_ptr = input.data_ptr<scalar_t>();
       float* scale_ptr = scale.data_ptr<float>();
       void *kernelArgs[] = {(void *)&out_ptr, (void *)&input_ptr,
-                            (void *)&scale_ptr, (void*)d, (void *)&num_tokens};
+                            (void *)&scale_ptr, (void*)&d, (void *)&num_tokens};
       AT_CUDA_CHECK(
         cudaLaunchCooperativeKernel((void *)vllm::fp8_silu_and_mul_kernel<scalar_t>,
           grid, block, kernelArgs, d * sizeof(scalar_t), stream));

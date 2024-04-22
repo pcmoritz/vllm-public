@@ -97,19 +97,19 @@ struct SharedMemory
 template <>
 struct SharedMemory <float>
 {
-    __device__ float* get() { extern __shared__ float data[]; return data; }
+    __device__ float* get() { extern __shared__ float float_data[]; return float_data; }
 };
 
 template <>
 struct SharedMemory <c10::Half>
 {
-    __device__ c10::Half* get() { extern __shared__ c10::Half data[]; return data; }
+    __device__ c10::Half* get() { extern __shared__ c10::Half half_data[]; return half_data; }
 };
 
 template <>
 struct SharedMemory <c10::BFloat16>
 {
-    __device__ c10::BFloat16* get() { extern __shared__ c10::BFloat16 data[]; return data; }
+    __device__ c10::BFloat16* get() { extern __shared__ c10::BFloat16 bfloat16_data[]; return bfloat16_data; }
 };
 
 

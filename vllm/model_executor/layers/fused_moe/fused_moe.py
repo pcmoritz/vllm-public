@@ -428,7 +428,7 @@ def fused_moe(
     sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
-    block_size_m = torch.tensor(config["BLOCK_SIZE_M"], dtype=torch.int64, device=hidden_states.device)
+    block_size_m = torch.tensor(config["BLOCK_SIZE_M"], dtype=torch.int64)
 
     a1_scale = torch.ones(ceildiv(M * topk_ids.shape[1], config["BLOCK_SIZE_M"]),
                            device=hidden_states.device, dtype=torch.float32)

@@ -213,6 +213,7 @@ void fp8_silu_and_mul_kernel(
     input.scalar_type(),
     "fp8_silu_and_mul_kernel_kernel",
     [&] {
+      AT_CUDA_CHECK(cudaFuncSetAttribute((void *)vllm::fp8_silu_and_mul_kernel<scalar_t>, cudaFuncAttributeMaxDynamicSharedMemorySize, 100000));
       vllm::fp8_silu_and_mul_kernel<scalar_t><<<grid, block, d * sizeof(scalar_t) * bs_m, stream>>>(
         out.data_ptr<c10::Float8_e4m3fn>(),
         input.data_ptr<scalar_t>(),

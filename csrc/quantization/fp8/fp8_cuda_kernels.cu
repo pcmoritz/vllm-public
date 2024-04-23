@@ -130,7 +130,7 @@ __global__ void fp8_silu_and_mul_kernel(
   const int64_t num_tokens,
   const int64_t block_size_m) {
   SharedMemory<scalar_t> smem;
-  scalar_t* result = smem.get();
+  scalar_t* results = smem.get();
   __shared__ float cache[1024];
 
   int64_t max_token_idx = min((blockIdx.x + 1) * block_size_m, num_tokens);

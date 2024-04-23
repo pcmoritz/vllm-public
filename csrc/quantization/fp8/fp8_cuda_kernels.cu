@@ -160,10 +160,10 @@ __global__ void fp8_silu_and_mul_kernel(
   float scale = cache[0] / std::numeric_limits<c10::Float8_e4m3fn>::max();
 
   // Convert results to FP8 with scaling
-  for (int64_t token_idx = blockIdx.x; token_idx < num_tokens; token_idx += gridDim.x) {
+  for (int64_t token_idx = blockIdx.x * block_size_m; token_idx < max_token_idx; ++token_idx) {
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
       if (threadIdx.x == 0) {
-        scales[token_idx] = scale;
+        scales[blockIdx.x] = scale;
       }
       out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(result[idx] / scale);
     }

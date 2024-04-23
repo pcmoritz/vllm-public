@@ -139,7 +139,7 @@ __global__ void fp8_silu_and_mul_kernel(
       const float y = (float) input[token_idx * 2 * d + d + idx];
       float r = silu_kernel(x) * y;
       cache[threadIdx.x] = max(cache[threadIdx.x], fabs(r));
-      results[(idx - threadIdx.x) / blockDim.x][blockIdx.x * block_size_m - token_idx] = static_cast<scalar_t>(r);
+      results[(idx - threadIdx.x) / blockDim.x][token_idx - blockIdx.x * block_size_m] = static_cast<scalar_t>(r);
     }
   }
 
@@ -163,7 +163,7 @@ __global__ void fp8_silu_and_mul_kernel(
       if (threadIdx.x == 0) {
         scales[blockIdx.x] = scale;
       }
-      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(results[(idx - threadIdx.x) / blockDim.x][blockIdx.x * block_size_m - token_idx] / scale);
+      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(results[(idx - threadIdx.x) / blockDim.x][token_idx - blockIdx.x * block_size_m] / scale);
     }
   }
 }

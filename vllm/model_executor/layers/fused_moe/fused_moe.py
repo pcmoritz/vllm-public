@@ -448,7 +448,7 @@ def fused_moe(
 
     a2_scale = torch.zeros(ceildiv(M * topk_ids.shape[1], config["BLOCK_SIZE_M"]),
                            device=hidden_states.device, dtype=torch.float32)
-    block_size_m = torch.tensor(config["BLOCK_SIZE_M"], dtype=torch.int64, device=hidden_states.device)
+    block_size_m = torch.tensor(config["BLOCK_SIZE_M"], dtype=torch.int64)
     ops.fp8_silu_and_mul_kernel(intermediate_cache2, intermediate_cache1.view(-1, N), a2_scale, block_size_m)
 
     invoke_fused_moe_kernel(intermediate_cache2,

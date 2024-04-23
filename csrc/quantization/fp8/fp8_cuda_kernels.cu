@@ -129,9 +129,7 @@ __global__ void fp8_silu_and_mul_kernel(
   const int d,
   const int64_t num_tokens,
   const int64_t block_size_m) {
-  SharedMemory<scalar_t> smem;
-  // FIXME: We actually don't need all this shared memory
-  scalar_t* result = smem.get();
+  scalar_t results[32][128];
   __shared__ float cache[1024];
 
   int64_t max_token_idx = min((blockIdx.x + 1) * block_size_m, num_tokens);
@@ -141,7 +139,7 @@ __global__ void fp8_silu_and_mul_kernel(
       const float y = (float) input[token_idx * 2 * d + d + idx];
       float r = silu_kernel(x) * y;
       cache[threadIdx.x] = max(cache[threadIdx.x], fabs(r));
-      result[idx] = static_cast<scalar_t>(r);
+      results[(idx - threadIdx.x) / blockDim.x][blockIdx.x * block_size_m - token_idx] = static_cast<scalar_t>(r);
     }
   }
 
@@ -165,7 +163,7 @@ __global__ void fp8_silu_and_mul_kernel(
       if (threadIdx.x == 0) {
         scales[blockIdx.x] = scale;
       }
-      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(result[idx] / scale);
+      out[token_idx * d + idx] = static_cast<c10::Float8_e4m3fn>(results[(idx - threadIdx.x) / blockDim.x][blockIdx.x * block_size_m - token_idx] / scale);
     }
   }
 }
@@ -214,7 +212,7 @@ void fp8_silu_and_mul_kernel(
     input.scalar_type(),
     "fp8_silu_and_mul_kernel_kernel",
     [&] {
-      vllm::fp8_silu_and_mul_kernel<scalar_t><<<grid, block, d * sizeof(scalar_t), stream>>>(
+      vllm::fp8_silu_and_mul_kernel<scalar_t><<<grid, block, 0, stream>>>(
         out.data_ptr<c10::Float8_e4m3fn>(),
         input.data_ptr<scalar_t>(),
         scales.data_ptr<float>(),

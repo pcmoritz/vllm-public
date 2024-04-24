@@ -429,10 +429,10 @@ def fused_moe(
         topk_ids, config['BLOCK_SIZE_M'], E)
 
     block_size_m = torch.tensor(config["BLOCK_SIZE_M"], dtype=torch.int64)
+    num_blocks_m = ceildiv(M * topk_ids.shape[1], config["BLOCK_SIZE_M"])
 
-    a1_scale = torch.ones(ceildiv(M * topk_ids.shape[1], config["BLOCK_SIZE_M"]),
-                           device=hidden_states.device, dtype=torch.float32)
     a1, _ = ops.scaled_fp8_quant(hidden_states)
+    a1_scale = a1.repeat(num_block_m)
 
     invoke_fused_moe_kernel(a1,
                             w1,
@@ -450,8 +450,7 @@ def fused_moe(
                             compute_type=tl.float16,
                             use_fp8=use_fp8)
 
-    a2_scale = torch.zeros(ceildiv(M * topk_ids.shape[1], config["BLOCK_SIZE_M"]),
-                           device=hidden_states.device, dtype=torch.float32)
+    a2_scale = torch.zeros(num_blocks_m,device=hidden_states.device, dtype=torch.float32)
     ops.fp8_silu_and_mul_kernel(intermediate_cache2, intermediate_cache1.view(-1, N), a2_scale, block_size_m)
 
     invoke_fused_moe_kernel(intermediate_cache2,

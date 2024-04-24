@@ -431,8 +431,8 @@ def fused_moe(
     block_size_m = torch.tensor(config["BLOCK_SIZE_M"], dtype=torch.int64)
     num_blocks_m = ceildiv(M * topk_ids.shape[1], config["BLOCK_SIZE_M"])
 
-    a1, _ = ops.scaled_fp8_quant(hidden_states)
-    a1_scale = a1.repeat(num_blocks_m)
+    a1, a1_s = ops.scaled_fp8_quant(hidden_states)
+    a1_scale = a1_s.repeat(num_blocks_m)
 
     invoke_fused_moe_kernel(a1,
                             w1,

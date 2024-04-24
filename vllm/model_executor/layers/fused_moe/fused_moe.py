@@ -137,7 +137,7 @@ def fused_moe_kernel(
                     other=0.0)
         # We accumulate along the K dimension.
         if use_fp8:
-            accumulator = tl.dot(a, b, acc=accumulator, allow_tf32=True)
+            accumulator = tl.dot(a, b, acc=accumulator)
         else:
             accumulator += tl.dot(a, b)
         # Advance the ptrs to the next K block.
@@ -230,6 +230,13 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
                             use_fp8: bool) -> None:
     assert topk_weights.stride(1) == 1
     assert sorted_token_ids.stride(0) == 1
+
+    if not use_fp8:
+        A_scale = None
+        assert B_scale is None
+    else:
+        A, A_scale = ops.scaled_fp8_quant(A)
+        assert B_scale is not None
 
     grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[
         'BLOCK_SIZE_M']) * triton.cdiv(B.shape[1], META['BLOCK_SIZE_N']), )

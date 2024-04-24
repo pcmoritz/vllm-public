@@ -49,6 +49,7 @@ from vllm.model_executor.model_loader.weight_utils import default_weight_loader
 from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.model_executor.utils import set_weight_attrs
 from vllm.sequence import SamplerOutput
+from vllm.utils import print_warning_once
 
 
 class MixtralMoE(nn.Module):
@@ -103,16 +104,15 @@ class MixtralMoE(nn.Module):
                         device="cuda",
                         dtype=self.params_dtype))
 
-        # Scaling factors for fp8 weights. If fp8 is not used, these parameters
-        # are 1.0 so no rescaling will happen.
-        self.ws_scale = nn.Parameter(torch.ones(self.num_total_experts,
-                                                device="cuda",
-                                                dtype=torch.float32),
-                                     requires_grad=False)
-        self.w2s_scale = nn.Parameter(torch.ones(self.num_total_experts,
-                                                 device="cuda",
-                                                 dtype=torch.float32),
-                                      requires_grad=False)
+        # Scaling factors for FP8 weights
+        self.ws_scale = nn.Parameter(
+            torch.ones(
+                self.num_total_experts, device="cuda", dtype=torch.float32),
+            requires_grad=False) if self.use_fp8 else None
+        self.w2s_scale = nn.Parameter(
+            torch.ones(
+                self.num_total_experts, device="cuda", dtype=torch.float32),
+            requires_grad=False) if self.use_fp8 else None
 
         set_weight_attrs(self.ws, {
             "weight_loader": self.weight_loader,
@@ -204,9 +204,10 @@ class MixtralAttention(nn.Module):
         self.sliding_window = sliding_window
 
         if isinstance(linear_method, Fp8LinearMethod):
-            # FIXME(pcmoritz): If we are using FP8, we currently do
-            # not want to quantize the attention layers until we improve
-            # the performance and make sure the accuracy is good.
+            print_warning_once(
+                "For Mixtral FP8 quantization, we currently do not quantize "
+                "the attention layers until their FP8 performance is improved."
+            )
             linear_method = None
 
         self.qkv_proj = QKVParallelLinear(

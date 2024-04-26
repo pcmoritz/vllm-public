@@ -80,9 +80,8 @@ template<typename scalar_t>
 __global__ void fast_scaled_fp8_quant_kernel(
   c10::Float8_e4m3fn* __restrict__ out,
   const scalar_t* __restrict__ input,
-  const float* __restrict__ scale,
-  int64_t num_elems,
-) {
+  float* __restrict__ scale,
+  int64_t num_elems) {
   __shared__ float cache[1024];
   __shared__ scalar_t activations[MAX_ACTIVATION_SIZE_FOR_FASTPATH];
   int i = threadIdx.x;

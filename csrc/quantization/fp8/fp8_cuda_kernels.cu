@@ -116,7 +116,7 @@ __global__ void fast_scaled_fp8_quant_kernel(
 
   i = threadIdx.x;
   while (i < num_elems) {
-    out[i] = static_cast<c10::Float8_e4m3fn>(input[i] / cache[0]);
+    out[i] = static_cast<c10::Float8_e4m3fn>(activations[i] / cache[0]);
     i += blockDim.x * gridDim.x;
   }
 }

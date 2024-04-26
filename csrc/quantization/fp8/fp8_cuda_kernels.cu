@@ -131,7 +131,7 @@ void scaled_fp8_quant(
   int64_t num_elems = input.numel();
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  if (num_elems <= MAX_ACTIVATION_SIZE_FOR_FASTPATH) {
+  if (num_elems <= vllm::MAX_ACTIVATION_SIZE_FOR_FASTPATH) {
     dim3 grid(1);
     dim3 block(1024);
     VLLM_DISPATCH_FLOATING_TYPES(

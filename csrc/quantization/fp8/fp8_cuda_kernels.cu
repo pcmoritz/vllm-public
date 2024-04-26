@@ -75,6 +75,36 @@ __global__ void scaled_fp8_quant_kernel(
 // Make it so for batch size 12 and Mixtral-8x22B TP2 the fastpath can still be used
 constexpr int64_t MAX_ACTIVATION_SIZE_FOR_FASTPATH = 12 * 8192;
 
+// See https://leimao.github.io/blog/CUDA-Shared-Memory-Templated-Kernel/
+template <typename T>
+struct SharedMemory
+{
+    __device__ T* get()
+    {
+        extern __device__ void Error_UnsupportedType(); // Ensure that we won't compile any un-specialized types
+        Error_UnsupportedType();
+        return (T*)0;
+    }
+};
+
+template <>
+struct SharedMemory <float>
+{
+    __device__ float* get() { extern __shared__ float float_data[]; return float_data; }
+};
+
+template <>
+struct SharedMemory <c10::Half>
+{
+    __device__ c10::Half* get() { extern __shared__ c10::Half half_data[]; return half_data; }
+};
+
+template <>
+struct SharedMemory <c10::BFloat16>
+{
+    __device__ c10::BFloat16* get() { extern __shared__ c10::BFloat16 bfloat16_data[]; return bfloat16_data; }
+};
+
 // The case where the activations fit into shared memory
 template<typename scalar_t>
 __global__ void fast_scaled_fp8_quant_kernel(
@@ -83,7 +113,8 @@ __global__ void fast_scaled_fp8_quant_kernel(
   float* __restrict__ scale,
   int64_t num_elems) {
   __shared__ float cache[1024];
-  __shared__ scalar_t activations[MAX_ACTIVATION_SIZE_FOR_FASTPATH];
+  SharedMemory<scalar_t> smem;
+  scalar_t* activations = smem.get();
   int i = threadIdx.x;
 
   // First store maximum for all values processes by
@@ -138,7 +169,11 @@ void scaled_fp8_quant(
       input.scalar_type(),
       "fast_scaled_fp8_quant_kernel",
       [&] {
-        vllm::fast_scaled_fp8_quant_kernel<scalar_t><<<grid, block, 0, stream>>>(
+        AT_CUDA_CHECK(cudaFuncSetAttribute(
+          (void *)vllm::fast_scaled_fp8_quant_kernel<scalar_t>,
+          cudaFuncAttributeMaxDynamicSharedMemorySize,
+          num_elems * sizeof(c10::Half)));
+        vllm::fast_scaled_fp8_quant_kernel<scalar_t><<<grid, block, num_elems * sizeof(c10::Half), stream>>>(
           out.data_ptr<c10::Float8_e4m3fn>(),
           input.data_ptr<scalar_t>(),
           scale.data_ptr<float>(),

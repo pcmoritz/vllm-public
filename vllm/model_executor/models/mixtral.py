@@ -192,7 +192,7 @@ class MixtralMoE(nn.Module):
                                         a1_scale=self.as_scale,
                                         a2_scale=self.a2s_scale)
         # Record the scales
-        with open(f"/tmp/activation-scales-{os.getpid()}.jsonl", "w") as f:
+        with open(f"/tmp/activation-scales-{os.getpid()}.jsonl", "a") as f:
             f.write(json.dumps({"layer_index": self.layer_index, **_GLOBAL_ACTIVATION_SCALES}) + "\n")
 
         if self.tp_size > 1:

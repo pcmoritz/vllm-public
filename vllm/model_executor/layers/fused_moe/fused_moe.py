@@ -14,6 +14,10 @@ from vllm.utils import is_hip
 
 logger = init_logger(__name__)
 
+_GLOBAL_ACTIVATION_SCALES = {
+    "a1s": 0.0,
+    "a2s": 0.0,
+}
 
 @triton.jit
 def fused_moe_kernel(
@@ -229,6 +233,7 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
                             mul_routed_weight: bool, top_k: int,
                             config: Dict[str, Any], compute_type: tl.dtype,
                             use_fp8: bool) -> None:
+    global _GLOBAL_ACTIVATION_SCALES
     assert topk_weights.stride(1) == 1
     assert sorted_token_ids.stride(0) == 1
 
@@ -237,6 +242,7 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
         assert B_scale is None
     else:
         A, A_scale = ops.scaled_fp8_quant(A, A_scale)
+        _GLOBAL_ACTIVATION_SCALES["a1s" if not mul_routed_weight else "a2s"] = A_scale[0]
         assert B_scale is not None
 
     grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[

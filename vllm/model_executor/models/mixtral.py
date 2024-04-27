@@ -21,6 +21,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Inference-only Mixtral model."""
+import json
+import os
 from typing import Iterable, List, Optional, Tuple
 
 import torch
@@ -33,7 +35,7 @@ from vllm.config import LoRAConfig
 from vllm.distributed import (get_tensor_model_parallel_rank,
                               get_tensor_model_parallel_world_size,
                               tensor_model_parallel_all_reduce)
-from vllm.model_executor.layers.fused_moe import fused_moe
+from vllm.model_executor.layers.fused_moe import (_GLOBAL_ACTIVATION_SCALES, fused_moe)
 from vllm.model_executor.layers.layernorm import RMSNorm
 from vllm.model_executor.layers.linear import (QKVParallelLinear,
                                                ReplicatedLinear,
@@ -68,6 +70,7 @@ class MixtralMoE(nn.Module):
         top_k: int,
         hidden_size: int,
         intermediate_size: int,
+        layer_index: int,
         params_dtype: Optional[torch.dtype] = None,
         tp_size: Optional[int] = None,
         quant_config: Optional[QuantizationConfig] = None,
@@ -78,6 +81,7 @@ class MixtralMoE(nn.Module):
         self.top_k = top_k
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size // self.tp_size
+        self.layer_index = layer_index
         # FIXME(pcmoritz): Make this more general to support different
         # quantization schemes
         self.use_fp8 = isinstance(quant_config, Fp8Config)
@@ -169,6 +173,7 @@ class MixtralMoE(nn.Module):
             self.w2s = nn.Parameter(w2s, requires_grad=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        global _GLOBAL_ACTIVATION_SCALES
         num_tokens, hidden_size = hidden_states.shape
         hidden_states = hidden_states.view(-1, self.hidden_size)
         # router_logits: (num_tokens, n_experts)
@@ -185,6 +190,9 @@ class MixtralMoE(nn.Module):
                                         w2_scale=self.w2s_scale,
                                         a1_scale=self.as_scale,
                                         a2_scale=self.a2s_scale)
+        # Record the scales
+        with open(f"/tmp/activation-scales-{os.getpid()}.jsonl", "w") as f:
+            f.write(json.dumps({"layer_index": self.layer_index, **_GLOBAL_ACTIVATION_SCALES}) + "\n")
 
         if self.tp_size > 1:
             final_hidden_states = tensor_model_parallel_all_reduce(
@@ -282,6 +290,7 @@ class MixtralDecoderLayer(nn.Module):
     def __init__(
         self,
         config: MixtralConfig,
+        layer_index: int,
         quant_config: Optional[QuantizationConfig] = None,
     ) -> None:
         super().__init__()
@@ -301,6 +310,7 @@ class MixtralDecoderLayer(nn.Module):
             top_k=config.num_experts_per_tok,
             hidden_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
+            layer_index=layer_index,
             quant_config=quant_config)
         self.input_layernorm = RMSNorm(config.hidden_size,
                                        eps=config.rms_norm_eps)
@@ -357,8 +367,8 @@ class MixtralModel(nn.Module):
             org_num_embeddings=config.vocab_size,
         )
         self.layers = nn.ModuleList([
-            MixtralDecoderLayer(config, quant_config=quant_config)
-            for _ in range(config.num_hidden_layers)
+            MixtralDecoderLayer(config, layer_index, quant_config=quant_config)
+            for layer_index in range(config.num_hidden_layers)
         ])
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

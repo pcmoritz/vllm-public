@@ -242,7 +242,7 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
         assert B_scale is None
     else:
         A, A_scale = ops.scaled_fp8_quant(A, A_scale)
-        _GLOBAL_ACTIVATION_SCALES["a1s" if not mul_routed_weight else "a2s"] = A_scale[0]
+        _GLOBAL_ACTIVATION_SCALES["a1s" if not mul_routed_weight else "a2s"] = A_scale.item()
         assert B_scale is not None
 
     grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[

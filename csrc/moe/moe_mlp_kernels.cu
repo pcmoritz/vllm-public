@@ -19,7 +19,6 @@
 #include <c10/cuda/CUDAGuard.h>
 
 #include "../dispatch_utils.h"
-#include "moe_gemm_kernels.h"
 
 #include <cuda.h>
 #include <math.h>
@@ -30,6 +29,8 @@
 #include "cutlass/numeric_conversion.h"
 #include "cutlass/numeric_types.h"
 #include "cutlass_extensions/epilogue/thread/fused_activations.h"
+
+#include "moe_gemm_kernels.h"
 
 namespace tensorrt_llm {
 

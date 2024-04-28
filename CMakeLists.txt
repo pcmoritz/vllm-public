@@ -209,6 +209,8 @@ define_gpu_extension_target(
   ARCHITECTURES ${VLLM_GPU_ARCHES}
   WITH_SOABI)
 
+target_include_directories(_moe_C third_party/cutlass/include)
+
 #
 # _punica_C extension
 #

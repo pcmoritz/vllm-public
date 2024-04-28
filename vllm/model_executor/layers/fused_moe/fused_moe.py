@@ -399,7 +399,7 @@ def fused_moe(
             cum_num_tokens_per_expert,
             reverse_permutation_map,
             hidden_states,
-            topk_indices,
+            topk_ids,
             token_expert_indicies,
         )
 

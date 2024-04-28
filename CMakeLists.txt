@@ -195,6 +195,7 @@ define_gpu_extension_target(
 
 set(VLLM_MOE_EXT_SRC
   "csrc/moe/moe_ops.cpp"
+  "csrc/moe/moe_mlp_kernels.cu"
   "csrc/moe/unpermute_kernels.cu"
   "csrc/moe/permute_kernels.cu"
   "csrc/moe/topk_softmax_kernels.cu")

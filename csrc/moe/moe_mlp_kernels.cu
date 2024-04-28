@@ -26,9 +26,6 @@
 
 #include "cute/tensor.hpp"
 #include "cutlass/conv/convolution.h"
-// Order matters here, packed_stride.hpp is missing cute and convolution includes
-#include "cutlass/util/packed_stride.hpp"
-
 #include "cutlass/array.h"
 #include "cutlass/epilogue/thread/activation.h"
 #include "cutlass/gemm/gemm.h"

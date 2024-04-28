@@ -359,7 +359,7 @@ def fused_moe(
     assert hidden_states.dtype in [
         torch.float32, torch.float16, torch.bfloat16
     ]
-    M, _ = hidden_states.shape
+    M, K = hidden_states.shape
     E, N, _ = w1.shape
 
     if is_hip():
@@ -389,7 +389,20 @@ def fused_moe(
             token_expert_indicies,
             gating_output.float(),  # TODO(woosuk): Optimize this.
         )
-        del token_expert_indicies  # Not used. Will be used in the future.
+        
+        permuted_tokens = torch.empty(M * topk, K, dtype=hidden_states.dtype, device=hidden_states.device)
+        cum_num_tokens_per_expert = torch.empty(E, dtype=torch.long, device=hidden_states.device)
+        reverse_permutation_map = torch.empty(M * topk, dtype=torch.int32, device=hidden_states.device)
+
+        moe_kernels.expand_and_permute(
+            permuted_tokens,
+            cum_num_tokens_per_expert,
+            reverse_permutation_map,
+            hidden_states,
+            topk_indices,
+            token_expert_indicies,
+        )
+
     if renormalize:
         topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
 

@@ -62,6 +62,15 @@
 #include <math.h>
 #include <sstream>
 
+// FIXME(woosuk)
+#define TLLM_THROW(...)                                                                                                \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        throw std::runtime_error("ERROR!");                                                                         \
+    } while (0)
+
+#define TLLM_CHECK_WITH_INFO(...) ;;\
+
 namespace tensorrt_llm
 {
 namespace kernels::cutlass_kernels

@@ -33,6 +33,15 @@
 #include "cutlass/numeric_types.h"
 #include "cutlass_extensions/epilogue/thread/fused_activations.h"
 
+// FIXME(woosuk)
+#define TLLM_THROW(...)                                                                                                \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        throw std::runtime_error("ERROR!");                                                                         \
+    } while (0)
+
+#define TLLM_CHECK_WITH_INFO(...) ;;\
+
 #include "moe_gemm_kernels.h"
 
 namespace tensorrt_llm {

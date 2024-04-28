@@ -208,14 +208,14 @@ void run_moe_mlp(
     if (!tensorrt_llm::isGatedActivation(fc1_activation_type)) {
         moe_gemm_runner.moeGemmBiasAct(
             input_tokens, fc1_expert_weights, nullptr, fc1_expert_biases, fc1_output,
-            cum_num_tokens_per_expert, num_expanded_tokens, inter_size, hidden_size, num_experts,
+            cum_num_tokens_per_expert, hopper_input, num_expanded_tokens, inter_size, hidden_size, num_experts,
             fc1_activation_type, stream);
     } else {
         const size_t fc1_out_size = inter_size * 2;
         // Run the GEMM with activation function overridden with `Identity`, we do the activation separately
         moe_gemm_runner.moeGemmBiasAct(
             input_tokens, fc1_expert_weights, nullptr, fc1_expert_biases, glu_output,
-            cum_num_tokens_per_expert, num_expanded_tokens, fc1_out_size, hidden_size, num_experts,
+            cum_num_tokens_per_expert, hopper_input, num_expanded_tokens, fc1_out_size, hidden_size, num_experts,
             ActivationType::Identity, stream);
         doGatedActivation<T>(
             fc1_output, glu_output, nullptr, inter_size, num_expanded_tokens,
@@ -224,7 +224,7 @@ void run_moe_mlp(
     // Compute FC2
     moe_gemm_runner.moeGemm(
         fc1_output, fc2_expert_weights, nullptr, moe_output, cum_num_tokens_per_expert,
-        num_expanded_tokens, hidden_size, inter_size, num_experts, stream);
+        hopper_input, num_expanded_tokens, hidden_size, inter_size, num_experts, stream);
 }
 
 } // namespace tensorrt_llm

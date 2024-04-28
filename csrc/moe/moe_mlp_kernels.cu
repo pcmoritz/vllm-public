@@ -46,6 +46,104 @@
 
 namespace tensorrt_llm {
 
+namespace detail
+{
+// TODO these are copied from CUTLASS because the cutlass version is missing __device__ decorator
+template <class StrideIntT>
+CUTLASS_HOST_DEVICE cute::Stride<StrideIntT, cute::Int<1>, cute::Int<0>> make_cute_packed_stride(
+    cute::Stride<StrideIntT, cute::Int<1>, cute::Int<0>> s, cute::Shape<int, int, int> shape_MKL)
+{
+    static_assert(std::is_integral_v<StrideIntT>,
+        "Stride must have an integral type so it can be set dynamically. Static strides not supported.");
+    auto s_copy = s;
+    cute::get<0>(s_copy) = static_cast<StrideIntT>(cute::get<1>(shape_MKL));
+    return s_copy;
+}
+
+template <class StrideIntT>
+CUTLASS_HOST_DEVICE cute::Stride<cute::Int<1>, StrideIntT, cute::Int<0>> make_cute_packed_stride(
+    cute::Stride<cute::Int<1>, StrideIntT, cute::Int<0>> s, cute::Shape<int, int, int> shape_MKL)
+{
+    static_assert(std::is_integral_v<StrideIntT>,
+        "Stride must have an integral type so it can be set dynamically. Static strides not supported.");
+    auto s_copy = s;
+    cute::get<1>(s_copy) = static_cast<StrideIntT>(cute::get<0>(shape_MKL));
+    return s_copy;
+}
+
+} // namespace detail
+
+__device__ void computeHopperInputStrides(
+    HopperGroupedGemmInput layout_info, int gemm_m, int gemm_n, int gemm_k, int out_idx)
+{
+    layout_info.stride_a[out_idx] = detail::make_cute_packed_stride(
+        HopperGroupedGemmInput::StrideA{}, cute::make_shape(gemm_m, gemm_k, cute::Int<1>{}));
+    layout_info.stride_b[out_idx] = detail::make_cute_packed_stride(
+        HopperGroupedGemmInput::StrideB{}, cute::make_shape(gemm_n, gemm_k, cute::Int<1>{}));
+    if (layout_info.stride_c)
+    {
+        assert(false && "CUTLASS does not support a 1xN bias");
+        //        layout_info.stride_c[out_idx] = cute::make_stride(0, cute::Int<1>{}, 0);
+        layout_info.stride_c[out_idx] = detail::make_cute_packed_stride(
+            HopperGroupedGemmInput::StrideC{}, cute::make_shape(1, gemm_n, cute::Int<1>{}));
+    }
+    layout_info.stride_d[out_idx] = detail::make_cute_packed_stride(
+        HopperGroupedGemmInput::StrideD{}, cute::make_shape(gemm_n, gemm_m, cute::Int<1>{}));
+}
+
+template <class T, class WeightType>
+__device__ void computeHopperInputPointers(HopperGroupedGemmInput layout_info, int gemm_m, int gemm_n, int gemm_k,
+    int num_tokens_before_expert, int expert, T const* in, WeightType const* weights, T const* bias,
+    HopperGroupedGemmInput::OutputTypeAdaptor_t<T>* output, int const out_idx)
+{
+    // The input prior to this contains K elements per token, with `num_tokens_before_expert` tokens
+    layout_info.ptr_a[out_idx] = in + num_tokens_before_expert * gemm_k;
+
+    // Each expert's weight matrix is a constant size NxK, with `expert` experts
+    layout_info.ptr_b[out_idx] = weights + expert * (gemm_n * gemm_k);
+
+    if (bias)
+    {
+        // Each expert's bias is a constant size N, with `expert` experts
+        layout_info.ptr_c[out_idx] = bias + expert * gemm_n;
+    }
+
+    // The output prior to this contains N elements per token, with `num_tokens_before_expert` tokens
+    layout_info.ptr_d[out_idx] = output + num_tokens_before_expert * gemm_n;
+}
+
+// TODO Some of this setup could be cached
+template <class T, class WeightType>
+__global__ void computeStridesHopperKernel(int64_t const* total_rows_before_expert, HopperGroupedGemmInput layout_info,
+    int gemm_n, int gemm_k, int const num_experts, T const* in, WeightType const* weights, float const* fp8_dequant,
+    T const* bias, typename HopperGroupedGemmInput::OutputTypeAdaptor_t<T>* output)
+{
+    // First, compute the global tid. We only need 1 thread per expert.
+    int const expert = blockIdx.x * blockDim.x + threadIdx.x;
+    if (expert >= num_experts)
+    {
+        return;
+    }
+
+    auto const num_tokens_including_expert = total_rows_before_expert[expert];
+    auto const num_tokens_before_expert = expert > 0 ? total_rows_before_expert[expert - 1] : 0;
+    auto const num_tokens_to_expert = num_tokens_including_expert - num_tokens_before_expert;
+    auto const gemm_m = num_tokens_to_expert;
+
+    layout_info.shape_info.problem_shapes[expert]
+        = HopperGroupedGemmInput::ProblemShape::UnderlyingProblemShape(gemm_n, gemm_m, gemm_k);
+
+    if (fp8_dequant)
+    {
+        layout_info.alpha_scale_ptr_array[expert] = fp8_dequant + expert;
+    }
+
+    computeHopperInputStrides(layout_info, gemm_m, gemm_n, gemm_k, expert);
+
+    computeHopperInputPointers(
+        layout_info, gemm_m, gemm_n, gemm_k, num_tokens_before_expert, expert, in, weights, bias, output, expert);
+}
+
 // ============================== Gated Activation =================================
 template <class T, class ActFn>
 __global__ void doGatedActivationKernel(
@@ -105,6 +203,7 @@ void run_moe_mlp(
 {
     // FIXME(woosuk): The MoE GEMM runner is created for each call. This is inefficient.
     tensorrt_llm::MoeGemmRunner<T, T> moe_gemm_runner;
+    HopperGroupedGemmInput hopper_input;
     // Compute FC1
     if (!tensorrt_llm::isGatedActivation(fc1_activation_type)) {
         moe_gemm_runner.moeGemmBiasAct(

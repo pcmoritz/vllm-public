@@ -31,6 +31,7 @@
 
 #include "cutlass/array.h"
 #include "cutlass/epilogue/thread/activation.h"
+#include "cutlass/gemm/gemm.h"
 #include "cutlass/numeric_conversion.h"
 #include "cutlass/numeric_types.h"
 #include "cutlass_extensions/epilogue/thread/fused_activations.h"

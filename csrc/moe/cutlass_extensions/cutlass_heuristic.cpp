@@ -24,7 +24,7 @@
 
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/numeric_types.h"
-#include "tensorrt_llm/common/assert.h"
+// #include "tensorrt_llm/common/assert.h"
 
 #ifndef _WIN32
 #pragma GCC diagnostic pop

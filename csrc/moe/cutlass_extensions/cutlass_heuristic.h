@@ -17,7 +17,7 @@
 #pragma once
 
 #include "cutlass_extensions/gemm_configs.h"
-#include "tensorrt_llm/common/cudaUtils.h"
+#include "cudaUtils.h"
 
 namespace tensorrt_llm
 {

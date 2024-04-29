@@ -16,7 +16,7 @@
  */
 #pragma once
 
-#include "tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels.h"
+#include "moe_gemm_kernels.h"
 #include <cuda_runtime_api.h>
 
 namespace tensorrt_llm

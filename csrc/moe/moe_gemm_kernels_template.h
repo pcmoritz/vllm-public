@@ -52,8 +52,8 @@
 
 #include "moe_gemm_kernels_template_sm90.h"
 
-#include "tensorrt_llm/kernels/cutlass_kernels/moe_gemm/launchers/moe_gemm_launcher_sm90.h"
-#include "tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_kernels.h"
+#include "launchers/moe_gemm_launcher_sm90.h"
+#include "moe_gemm_kernels.h"
 #include "cutlass_extensions/moe_sm90_traits.h"
 
 #include <cuda.h>

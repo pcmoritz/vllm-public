@@ -47,8 +47,8 @@
 #pragma GCC diagnostic pop
 
 #include "cutlass_extensions/cudaUtils.h"
-#include "tensorrt_llm/kernels/cutlass_kernels/cutlass_heuristic.h"
-#include "tensorrt_llm/kernels/cutlass_kernels/cutlass_type_conversion.h"
+#include "cutlass_extensions/cutlass_heuristic.h"
+#include "cutlass_extensions/cutlass_type_conversion.h"
 
 #include "moe_gemm_kernels_template_sm90.h"
 

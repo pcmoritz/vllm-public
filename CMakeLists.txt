@@ -202,7 +202,8 @@ set(VLLM_MOE_EXT_SRC
   "csrc/moe/moe_mlp_kernels.cu"
   "csrc/moe/unpermute_kernels.cu"
   "csrc/moe/permute_kernels.cu"
-  "csrc/moe/topk_softmax_kernels.cu")
+  "csrc/moe/topk_softmax_kernels.cu"
+  "csrc/moe/cutlass_extensions/cutlass_heuristic.cpp")
 
 define_gpu_extension_target(
   _moe_C
@@ -214,7 +215,7 @@ define_gpu_extension_target(
   WITH_SOABI)
 
 target_include_directories(_moe_C PRIVATE "third_party/cutlass/include")
-target_include_directories(_moe_C PRIVATE "csrc/moe/cutlass_extensions/include")
+target_include_directories(_moe_C PRIVATE "csrc/moe")
 
 #
 # _punica_C extension

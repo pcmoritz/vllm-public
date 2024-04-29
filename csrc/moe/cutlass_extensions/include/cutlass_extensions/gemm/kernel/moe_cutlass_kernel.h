@@ -35,7 +35,7 @@
 #include "cutlass_extensions/gemm/kernel/gemm_moe_problem_visitor.h"
 #include "cutlass_extensions/tile_interleaved_layout.h"
 
-#include "tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_sm90_traits.h"
+#include "cutlass_extensions/moe_sm90_traits.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 

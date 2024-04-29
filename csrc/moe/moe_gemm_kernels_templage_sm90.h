@@ -46,7 +46,7 @@
 
 #pragma GCC diagnostic pop
 
-#include "cudaUtils.h"
+#include "cutlass_extensions/cudaUtils.h"
 #include "cutlass_extensions/cutlass_heuristic.h"
 
 #include "cutlass_extensions/cutlass_type_conversion.h"

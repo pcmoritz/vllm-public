@@ -18,7 +18,7 @@
 #include <cuda_runtime_api.h>
 
 #include "cutlass/device_kernel.h"
-#include "cudaUtils.h"
+#include "cutlass_extensions/cudaUtils.h"
 
 namespace tensorrt_llm
 {

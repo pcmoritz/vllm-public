@@ -490,6 +490,8 @@ def fused_moe(
     return torch.sum(intermediate_cache3.view(*intermediate_cache3.shape),
                      dim=1)
 
+import vllm._moe_C as moe_kernels
+
 def fused_moe_(
     hidden_states: torch.Tensor,
     w1: torch.Tensor,

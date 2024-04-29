@@ -195,6 +195,10 @@ define_gpu_extension_target(
 
 set(VLLM_MOE_EXT_SRC
   "csrc/moe/moe_ops.cpp"
+  "csrc/moe/moe_gemm_kernels_fp8_fp8.cu"
+  "csrc/moe/moe_gemm_kernels_fp16_fp16.cu"
+  "csrc/moe/moe_gemm_kernels_bf16_bf16.cu"
+  "csrc/moe/moe_gemm_kernels_fp32_fp32.cu"
   "csrc/moe/moe_mlp_kernels.cu"
   "csrc/moe/unpermute_kernels.cu"
   "csrc/moe/permute_kernels.cu"

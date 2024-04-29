@@ -277,6 +277,8 @@ void moe_mlp(
         LAUNCH_MOE_MLP(at::Half, half);
     } else if (dtype == at::ScalarType::BFloat16) {
         LAUNCH_MOE_MLP(at::BFloat16, __nv_bfloat16);
+    } else if (dtype == at::ScalarType::Float8_e4m3fn)
+        LAUNCH_MOE_MLP(at::Float8_e4m3fn, __nv_fp8_e4m3);
     } else {
         TORCH_CHECK(false, "Unsupported data type: ", dtype);
     }

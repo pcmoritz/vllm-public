@@ -197,6 +197,10 @@ def scaled_fp8_quant(
     return output, scale
 
 
+def scaled_fp8_silu_and_mul(out: torch.Tensor, input: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+    vllm_ops.static_scaled_fp8_silu_and_mul(out, input, scale)
+
+
 # moe
 def moe_align_block_size(topk_ids: torch.Tensor, num_experts: int,
                          block_size: int, sorted_token_ids: torch.Tensor,

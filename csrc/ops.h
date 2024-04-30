@@ -174,6 +174,11 @@ void dynamic_scaled_fp8_quant(
   torch::Tensor& input,
   torch::Tensor& scale);
 
+void static_scaled_fp8_silu_and_mul(
+  torch::Tensor& out,
+  torch::Tensor& input,
+  torch::Tensor& scale);
+
 void moe_align_block_size(
   torch::Tensor topk_ids,
   int num_experts,

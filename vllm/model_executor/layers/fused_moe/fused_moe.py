@@ -232,13 +232,6 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
     assert topk_weights.stride(1) == 1
     assert sorted_token_ids.stride(0) == 1
 
-    if not use_fp8:
-        assert A_scale is None
-        assert B_scale is None
-    else:
-        A, A_scale = ops.scaled_fp8_quant(A, A_scale)
-        assert B_scale is not None
-
     grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[
         'BLOCK_SIZE_M']) * triton.cdiv(B.shape[1], META['BLOCK_SIZE_N']), )
 
@@ -426,7 +419,7 @@ def fused_moe(
                                       dtype=hidden_states.dtype)
     intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
-                                      dtype=hidden_states.dtype)
+                                      dtype=hidden_states.dtype if not use_fp8 else torch.float8_e4m3fn)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
@@ -435,6 +428,13 @@ def fused_moe(
         topk_ids, config['BLOCK_SIZE_M'], E)
     compute_type = (tl.bfloat16
                     if hidden_states.dtype == torch.bfloat16 else tl.float16)
+
+    if not use_fp8:
+        assert a1_scale is None
+        assert w1_scale is None
+    else:
+        hidden_states, a1_scale = ops.scaled_fp8_quant(hidden_states, a1_scale)
+        assert w1_scale is not None
 
     invoke_fused_moe_kernel(hidden_states,
                             w1,
@@ -452,7 +452,13 @@ def fused_moe(
                             compute_type=compute_type,
                             use_fp8=use_fp8)
 
-    ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
+    if not use_fp8:
+        assert a2_scale is None
+        assert w2_scale is None
+        ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
+    else:
+        ops.scaled_fp8_silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N), a2_scale)
+        assert w2_scale is not None
 
     invoke_fused_moe_kernel(intermediate_cache2,
                             w2,

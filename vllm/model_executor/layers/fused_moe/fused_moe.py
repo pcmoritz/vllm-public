@@ -430,13 +430,14 @@ def fused_moe(
                     if hidden_states.dtype == torch.bfloat16 else tl.float16)
 
     if not use_fp8:
+        a1 = hidden_states
         assert a1_scale is None
         assert w1_scale is None
     else:
-        hidden_states, a1_scale = ops.scaled_fp8_quant(hidden_states, a1_scale)
+        a1, a1_scale = ops.scaled_fp8_quant(hidden_states, a1_scale)
         assert w1_scale is not None
 
-    invoke_fused_moe_kernel(hidden_states,
+    invoke_fused_moe_kernel(a1,
                             w1,
                             intermediate_cache1,
                             a1_scale,

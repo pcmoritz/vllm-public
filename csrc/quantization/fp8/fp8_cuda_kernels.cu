@@ -162,7 +162,7 @@ void static_scaled_fp8_silu_and_mul(
       vllm::scaled_fp8_silu_and_mul_kernel<scalar_t><<<grid, block, 0, stream>>>(
         out.data_ptr<c10::Float8_e4m3fn>(),
         input.data_ptr<scalar_t>(),
-        scale.data_ptr<float()>,
+        scale.data_ptr<float>(),
         d);
     });
 }

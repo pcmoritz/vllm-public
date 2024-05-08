@@ -133,7 +133,7 @@ void dynamic_scaled_fp8_quant(
       });
 }
 
-void fp8_scaled_gemm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& weights, torch::Tensor& workspace) {
+void fp8_scaled_gemm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& weights, torch::Tensor& scales, torch::Tensor& workspace) {
   cublasLtHandle_t ltHandle = at::cuda::getCurrentCUDABlasLtHandle();
 
   const c10::Float8_e4m3fn *A = input.data_ptr<c10::Float8_e4m3fn>();
@@ -148,6 +148,12 @@ void fp8_scaled_gemm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& we
   int lda = k;
   int ldb = k;
   int ldc = m;
+
+  float* a_scale = &scales.data_ptr<float>()[0];
+  float* b_scale = &scales.data_ptr<float>()[1];
+  float* c_scale = &scales.data_ptr<float>()[2];
+  float* d_scale = &scales.data_ptr<float>()[3];
+  float* amax_d = &scales.data_ptr<float>()[4];
 
   auto workspacePtr = workspace.data_ptr<uint8_t>();
   size_t workspaceSize = workspace.numel();
@@ -167,16 +173,18 @@ void fp8_scaled_gemm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& we
 
   // create operation desciriptor; see cublasLtMatmulDescAttributes_t for details about defaults; here we just need to
   // set the transforms for A and B
-  TORCH_CUDABLAS_CHECK(cublasLtMatmulDescCreate(&operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+  TORCH_CUDABLAS_CHECK(cublasLtMatmulDescCreate(&operationDesc, CUBLAS_COMPUTE_32F_FAST_TF32, CUDA_R_32F));
+  int8_t use_fast_accum = 0;
+  TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_FAST_ACCUM, &use_fast_accum, sizeof(use_fast_accum)));
   TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
   TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transb)));
 
   // set scaling factors
-  // TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_A_SCALE_POINTER, &a_scale, sizeof(a_scale)));
-  // TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_B_SCALE_POINTER, &b_scale, sizeof(b_scale)));
-  // TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_C_SCALE_POINTER, &c_scale, sizeof(c_scale)));
-  // TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_D_SCALE_POINTER, &d_scale, sizeof(d_scale)));
-  // TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_AMAX_D_POINTER, &amax_d, sizeof(amax_d)));
+  TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_A_SCALE_POINTER, &a_scale, sizeof(a_scale)));
+  TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_B_SCALE_POINTER, &b_scale, sizeof(b_scale)));
+  TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_C_SCALE_POINTER, &c_scale, sizeof(c_scale)));
+  TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_D_SCALE_POINTER, &d_scale, sizeof(d_scale)));
+  TORCH_CUDABLAS_CHECK(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_AMAX_D_POINTER, &amax_d, sizeof(amax_d)));
 
   // create matrix descriptors, we are good with the details here so no need to set any extra attributes
   // table of supported type combinations can be found in the documentation: https://docs.nvidia.com/cuda/cublas/index.html#cublasltmatmul

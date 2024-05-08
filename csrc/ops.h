@@ -180,6 +180,7 @@ void fp8_scaled_gemm(
   torch::Tensor& out,
   torch::Tensor& input,
   torch::Tensor& weights,
+  torch::Tensor& scales,
   torch::Tensor& workspace);
 
 void moe_align_block_size(

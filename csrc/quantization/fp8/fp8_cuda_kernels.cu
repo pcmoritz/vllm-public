@@ -138,7 +138,7 @@ void fp8_scaled_gemm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& we
 
   const c10::Float8_e4m3fn *A = input.data_ptr<c10::Float8_e4m3fn>();
   const c10::Float8_e4m3fn *B = weights.data_ptr<c10::Float8_e4m3fn>();
-  c10::Float8_e4m3fn *D = out.data_ptr<c10::Half>();
+  c10::Float8_e4m3fn *D = out.data_ptr<c10::Float8_e4m3fn>();
 
 
   int m = input.size(0);

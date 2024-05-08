@@ -136,6 +136,11 @@ void dynamic_scaled_fp8_quant(
 void fp8_scaled_gemm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& weights, torch::Tensor& workspace) {
   cublasLtHandle_t ltHandle = at::cuda::getCurrentCUDABlasLtHandle();
 
+  const c10::Float8_e4m3fn *A = input.data_ptr<c10::Float8_e4m3fn>();
+  const c10::Float8_e4m3fn *B = weights.data_ptr<c10::Float8_e4m3fn>();
+  c10::Float8_e4m3fn *D = out.data_ptr<c10::Half>();
+
+
   int m = input.size(0);
   int n = weights.size(1);
   int k = weights.size(0);
@@ -144,7 +149,7 @@ void fp8_scaled_gemm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& we
   int ldb = k;
   int ldc = m;
 
-  uint8_t* workspace = workspace.data_ptr<uint8_t>();
+  auto workspacePtr = workspace.data_ptr<uint8_t>();
   size_t workspaceSize = workspace.numel();
 
   float alpha = 1.0;
@@ -207,7 +212,7 @@ void fp8_scaled_gemm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& we
                                    D,
                                    Ddesc,
                                    &heuristicResult.algo,
-                                   workspace,
+                                   workspacePtr,
                                    workspaceSize,
                                    0));
 

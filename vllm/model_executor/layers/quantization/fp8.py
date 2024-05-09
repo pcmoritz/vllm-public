@@ -227,27 +227,31 @@ class Fp8LinearMethod(LinearMethodBase):
     def apply(self,
               layer: torch.nn.Module,
               x: torch.Tensor,
-              bias: Optional[torch.Tensor] = None) -> torch.Tensor:
-        # ops.scaled_fp8_quant supports both dynamic and static quant.
-        #   If dynamic, layer.act_scale is None and x_scale computed from x.
-        #   If static,  layer.act_scale is scalar and x_scale set to act_scale.
-        qinput, x_scale = ops.scaled_fp8_quant(x,
-                                               layer.act_scale,
-                                               batch_dim_padding=32)
+              bias: Optional[torch.Tensor] = None, out_dtype=None) -> torch.Tensor:
+        if x.dtype == torch.float8_e4m3fn:
+            qinput = x
+            x_scale = layer.act_scale
+        else:
+            # ops.scaled_fp8_quant supports both dynamic and static quant.
+            #   If dynamic, layer.act_scale is None and x_scale computed from x.
+            #   If static,  layer.act_scale is scalar and x_scale set to act_scale.
+            qinput, x_scale = ops.scaled_fp8_quant(x,
+                                                   layer.act_scale,
+                                                   batch_dim_padding=32)
 
         # Fused GEMM_DQ -- note we padded the input above because
         # torch._scaled_mm is more performant for matrices with
         # batch dimension at least 32.
-        output, _ = torch._scaled_mm(
+        output, updated_amax = torch._scaled_mm(
             qinput,
             layer.weight,
-            out_dtype=x.dtype,
+            out_dtype=x.dtype if not out_dtype else out_dtype,
             scale_a=x_scale,
             scale_b=layer.weight_scale,
             bias=bias,
         )
 
-        return torch.narrow(output, 0, 0, x.shape[0])
+        return torch.narrow(output, 0, 0, x.shape[0]), updated_amax
 
 
 def all_close_1d(x: torch.Tensor) -> bool:

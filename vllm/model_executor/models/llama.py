@@ -71,12 +71,12 @@ class LlamaMLP(nn.Module):
         if hidden_act != "silu":
             raise ValueError(f"Unsupported activation: {hidden_act}. "
                              "Only silu is supported for now.")
-        self.act_fn = SiluAndMul()
+        self.act_fn = SiluAndMul(self.down_proj.act_scale)
 
     def forward(self, x):
-        gate_up, _ = self.gate_up_proj(x)
-        x = self.act_fn(gate_up)
-        x, _ = self.down_proj(x)
+        gate_up, _, gate_up_scale = self.gate_up_proj(x)
+        x = self.act_fn(gate_up, gate_up_scale)
+        x, _, _ = self.down_proj(x, dtype=x.dtype)
         return x
 
 

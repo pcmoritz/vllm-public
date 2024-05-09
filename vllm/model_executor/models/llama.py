@@ -74,9 +74,9 @@ class LlamaMLP(nn.Module):
         self.act_fn = SiluAndMul(self.down_proj.act_scale)
 
     def forward(self, x):
-        gate_up, _, gate_up_scale = self.gate_up_proj(x)
+        gate_up, _, gate_up_scale = self.gate_up_proj(x, out_dtype=torch.float8_e4m3fn)
         x = self.act_fn(gate_up, gate_up_scale)
-        x, _, _ = self.down_proj(x, dtype=x.dtype)
+        x, _, _ = self.down_proj(x, out_dtype=x.dtype)
         return x
 
 

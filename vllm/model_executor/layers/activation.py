@@ -24,8 +24,9 @@ class SiluAndMul(nn.Module):
         return: (num_tokens, d) or (batch_size, seq_len, d)
     """
 
-    def __init__(self, output_scale: torch.Tensor):
+    def __init__(self, input_scale: torch.Tensor, output_scale: torch.Tensor):
         super().__init__()
+        self.input_scale = input_scale
         self.output_scale = output_scale
 
     def _forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -37,7 +38,7 @@ class SiluAndMul(nn.Module):
         d = x.shape[-1] // 2
         output_shape = (x.shape[:-1] + (d, ))
         out = torch.empty(output_shape, dtype=x.dtype, device=x.device)
-        _C.ops.static_scaled_fp8_silu_and_mul(out, self.output_scale, x, x_scale)
+        _C.ops.static_scaled_fp8_silu_and_mul(out, self.output_scale, x, self.input_scale)
         return out
 
 

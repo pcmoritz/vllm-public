@@ -242,7 +242,7 @@ class Fp8LinearMethod(LinearMethodBase):
         # Fused GEMM_DQ -- note we padded the input above because
         # torch._scaled_mm is more performant for matrices with
         # batch dimension at least 32.
-        output, updated_amax = torch._scaled_mm(
+        output, _ = torch._scaled_mm(
             qinput,
             layer.weight,
             out_dtype=x.dtype if not out_dtype else out_dtype,
@@ -251,7 +251,7 @@ class Fp8LinearMethod(LinearMethodBase):
             bias=bias,
         )
 
-        return torch.narrow(output, 0, 0, x.shape[0]), updated_amax
+        return torch.narrow(output, 0, 0, x.shape[0])
 
 
 def all_close_1d(x: torch.Tensor) -> bool:

@@ -71,12 +71,12 @@ class LlamaMLP(nn.Module):
         if hidden_act != "silu":
             raise ValueError(f"Unsupported activation: {hidden_act}. "
                              "Only silu is supported for now.")
-        self.act_fn = SiluAndMul(self.down_proj.act_scale)
+        self.act_fn = SiluAndMul(self.gate_up_proj.act_scale2, self.down_proj.act_scale)
 
     def forward(self, x):
-        gate_up, _, gate_up_scale = self.gate_up_proj(x, out_dtype=torch.float8_e4m3fn)
-        x = self.act_fn(gate_up, gate_up_scale)
-        x, _, _ = self.down_proj(x, out_dtype=torch.bfloat16)
+        gate_up, _ = self.gate_up_proj(x, out_dtype=torch.float8_e4m3fn)
+        x = self.act_fn(gate_up)
+        x, _ = self.down_proj(x, out_dtype=torch.bfloat16)
         return x
 
 
@@ -161,12 +161,12 @@ class LlamaAttention(nn.Module):
         kv_cache: torch.Tensor,
         attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
-        qkv, _, _ = self.qkv_proj(hidden_states)
+        qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v, kv_cache, attn_metadata,
                                 self.kv_scale)
-        output, _, _ = self.o_proj(attn_output)
+        output, _ = self.o_proj(attn_output)
         return output
 
 

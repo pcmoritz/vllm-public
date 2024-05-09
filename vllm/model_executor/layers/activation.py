@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from vllm import _custom_ops as ops
+from vllm import _C
 from vllm.distributed import (divide, get_tensor_model_parallel_rank,
                               get_tensor_model_parallel_world_size)
 from vllm.model_executor.layers.quantization import QuantizationConfig
@@ -36,7 +37,7 @@ class SiluAndMul(nn.Module):
         d = x.shape[-1] // 2
         output_shape = (x.shape[:-1] + (d, ))
         out = torch.empty(output_shape, dtype=x.dtype, device=x.device)
-        vllm._C.ops.static_scaled_fp8_silu_and_mul(out, self.output_scale, x, x_scale)
+        _C.ops.static_scaled_fp8_silu_and_mul(out, self.output_scale, x, x_scale)
         return out
 
 

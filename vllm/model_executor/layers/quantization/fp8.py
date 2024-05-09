@@ -222,7 +222,7 @@ class Fp8LinearMethod(LinearMethodBase):
                 if not all_close_1d(layer.act_scale) or not all_close_1d(layer.act_scale2):
                     raise ValueError(
                         "All the act_scales for the logical weights of a layer "
-                        f"must be equal. But got {layer.act_scale}")
+                        f"must be equal. But got {layer.act_scale}, {layer.act_scale2}")
                 layer.act_scale = Parameter(layer.act_scale.max(),
                                             requires_grad=False)
                 layer.act_scale2 = Parameter(layer.act_scale2.max(), requires_grad=False)

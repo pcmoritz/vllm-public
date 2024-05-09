@@ -263,7 +263,7 @@ class Fp8LinearMethod(LinearMethodBase):
 
 def all_close_1d(x: torch.Tensor) -> bool:
     assert len(x.shape) == 1
-    return all(torch.allclose(x[0], x[i], rtol=1e-04, atol=1e-07) for i in range(x.shape[0]))
+    return all(torch.allclose(x[0], x[i], rtol=1e-03, atol=1e-06) for i in range(x.shape[0]))
 
 
 def per_tensor_quantize(tensor: torch.Tensor,

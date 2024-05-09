@@ -154,6 +154,11 @@ class Fp8LinearMethod(LinearMethodBase):
                     layer=layer,
                     output_partition_sizes=output_partition_sizes,
                     **extra_weight_attrs)
+                self._create_scale_param(
+                    scale_name="act_scale2",
+                    layer=layer,
+                    output_partition_sizes=output_partition_sizes,
+                    **extra_weight_attrs)
 
     def scales_shard_indexer(
             self, param: torch.Tensor, loaded_weight: torch.Tensor,
@@ -214,12 +219,13 @@ class Fp8LinearMethod(LinearMethodBase):
             if self.quant_config.activation_scheme == "dynamic":
                 layer.act_scale = None
             elif self.quant_config.activation_scheme == "static":
-                if not all_close_1d(layer.act_scale):
+                if not all_close_1d(layer.act_scale) or not all_close_1d(layer.act_scale2):
                     raise ValueError(
                         "All the act_scales for the logical weights of a layer "
                         f"must be equal. But got {layer.act_scale}")
                 layer.act_scale = Parameter(layer.act_scale.max(),
                                             requires_grad=False)
+                layer.act_scale2 = Parameter(layer.act_scale2.max(), requires_grad=False)
             else:
                 raise ValueError(
                     f"Unknown scheme {self.quant_config.activation_scheme}")
@@ -248,6 +254,7 @@ class Fp8LinearMethod(LinearMethodBase):
             out_dtype=x.dtype if not out_dtype else out_dtype,
             scale_a=x_scale,
             scale_b=layer.weight_scale,
+            scale_c=layer.act_scale2,
             bias=bias,
         )
 

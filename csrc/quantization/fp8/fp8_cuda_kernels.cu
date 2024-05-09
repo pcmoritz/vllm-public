@@ -166,7 +166,7 @@ void static_scaled_fp8_silu_and_mul(
   dim3 block(std::min(d, 1024));
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  vllm::scaled_fp8_silu_and_mul_kernel<<grid, block, 0, stream>>(
+  vllm::scaled_fp8_silu_and_mul_kernel<<<grid, block, 0, stream>>>(
     out.data_ptr<c10::Float8_e4m3fn>(),
     scale_out.data_ptr<float>(),
     input.data_ptr<c10::Float8_e4m3fn>(),

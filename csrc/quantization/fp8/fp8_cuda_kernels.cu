@@ -81,6 +81,27 @@ __global__ void scaled_fp8_quant_kernel(
   }
 }
 
+__device__ __forceinline__ float silu_kernel(float x) {
+  // x * sigmoid(x)
+  return x / (1.0f + expf(-x));
+}
+
+__global__ void scaled_fp8_silu_and_mul_kernel(
+  c10::Float8_e4m3fn* __restrict__ out,
+  const float* __restrict__ scale_out,
+  const c10::Float8_e4m3fn* __restrict__ input,
+  const float* __restrict__ scale_input,
+  const int d) {
+  const int64_t token_idx = blockIdx.x;
+  float s = *scale_input;
+  for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
+    const float x = static_cast<float>(input[token_idx * 2 * d + idx]) * s;
+    const float y = static_cast<float>(input[token_idx * 2 * d + d + idx]) * s;
+    const float r = silu_kernel(x) * y;
+    out[token_idx * d + idx] = scaled_fp8_conversion(r, *scale_out);
+  }
+}
+
 } // namespace vllm
 
 void static_scaled_fp8_quant(
@@ -133,3 +154,23 @@ void dynamic_scaled_fp8_quant(
       });
 }
 
+
+void static_scaled_fp8_silu_and_mul(
+  torch::Tensor& out,
+  torch::Tensor& scale_out,
+  torch::Tensor& input,
+  torch::Tensor& scale_input) {
+  int d = input.size(-1) / 2;
+  int64_t num_tokens = input.numel() / input.size(-1);
+  dim3 grid(num_tokens);
+  dim3 block(std::min(d, 1024));
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  vllm::scaled_fp8_silu_and_mul_kernel<<grid, block, 0, stream>>(
+    out.data_ptr<c10::Float8_e4m3fn>(),
+    scale_out.data_ptr<float>(),
+    input.data_ptr<c10::Float8_e4m3fn>(),
+    scale_input.data_ptr<float>(),
+    d
+  );
+}

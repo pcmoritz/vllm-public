@@ -254,7 +254,7 @@ class Fp8LinearMethod(LinearMethodBase):
             out_dtype=x.dtype if not out_dtype else out_dtype,
             scale_a=x_scale,
             scale_b=layer.weight_scale,
-            scale_c=layer.act_scale2,
+            scale_result=layer.act_scale2,
             bias=bias,
         )
 

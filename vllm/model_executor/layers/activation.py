@@ -34,7 +34,7 @@ class SiluAndMul(nn.Module):
         d = x.shape[-1] // 2
         return F.silu(x[..., :d]) * x[..., d:]
 
-    def forward(self, x: torch.Tensor, x_scale: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         d = x.shape[-1] // 2
         output_shape = (x.shape[:-1] + (d, ))
         out = torch.empty(output_shape, dtype=x.dtype, device=x.device)

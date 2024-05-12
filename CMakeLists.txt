@@ -190,7 +190,7 @@ if(VLLM_GPU_LANG STREQUAL "CUDA")
     "csrc/quantization/gptq_marlin/gptq_marlin.cu"
     "csrc/quantization/gptq_marlin/gptq_marlin_repack.cu"
     "csrc/custom_all_reduce.cu"
-    "csrc/quantization/gemm_kernels.cu")
+    "csrc/quantization/nvidia/gemm_kernels.cu")
 endif()
 
 define_gpu_extension_target(

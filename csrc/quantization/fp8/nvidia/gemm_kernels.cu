@@ -1,7 +1,7 @@
 #include "cutlass/cutlass.h"
 #include "cutlass/gemm/device/gemm.h"
 
-#include "dual_gemm.h"
+#include "dual_gemm_device.h"
 #include "left_silu_and_mul.h"
 
 

@@ -51,8 +51,8 @@ D2 = element_wise(D0, D1)
 #include "cutlass/epilogue/thread/linear_combination_relu.h"
 #include "cutlass/epilogue/threadblock/default_epilogue_tensor_op.h"
 
-#include "../kernel/dual_gemm.h"
-#include "../dual_gemm_common.h"
+#include "dual_gemm_kernel.h"
+#include "dual_gemm_common.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 

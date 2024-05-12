@@ -173,13 +173,24 @@ set(VLLM_EXT_SRC
   "csrc/pybind.cpp")
 
 if(VLLM_GPU_LANG STREQUAL "CUDA")
+  include(FetchContent)
+  SET(CUTLASS_ENABLE_HEADERS_ONLY=ON)
+  FetchContent_Declare(
+        cutlass
+        GIT_REPOSITORY https://github.com/nvidia/cutlass.git
+        # CUTLASS 3.5.0
+        GIT_TAG 7d49e6c7e2f8896c47f586706e67e1fb215529dc
+  )
+  FetchContent_MakeAvailable(cutlass)
+
   list(APPEND VLLM_EXT_SRC
     "csrc/quantization/aqlm/gemm_kernels.cu"
     "csrc/quantization/awq/gemm_kernels.cu"
     "csrc/quantization/marlin/marlin_cuda_kernel.cu"
     "csrc/quantization/gptq_marlin/gptq_marlin.cu"
     "csrc/quantization/gptq_marlin/gptq_marlin_repack.cu"
-    "csrc/custom_all_reduce.cu")
+    "csrc/custom_all_reduce.cu"
+    "csrc/quantization/gemm_kernels.cu")
 endif()
 
 define_gpu_extension_target(
@@ -189,6 +200,7 @@ define_gpu_extension_target(
   SOURCES ${VLLM_EXT_SRC}
   COMPILE_FLAGS ${VLLM_GPU_FLAGS}
   ARCHITECTURES ${VLLM_GPU_ARCHES}
+  INCLUDE_DIRECTORIES ${CUTLASS_INCLUDE_DIR}
   WITH_SOABI)
 
 #

@@ -177,7 +177,9 @@ class RayGPUExecutor(DistributedGPUExecutor):
         all_outputs = self._run_workers(
             "execute_model",
             driver_kwargs={"execute_model_req": execute_model_req},
-            use_ray_compiled_dag=USE_RAY_COMPILED_DAG)
+            use_ray_compiled_dag=USE_RAY_COMPILED_DAG,
+            get_worker_results=False,
+        )
 
         # Only the driver worker returns the sampling results.
         return all_outputs[0]
@@ -193,6 +195,7 @@ class RayGPUExecutor(DistributedGPUExecutor):
         use_dummy_driver: bool = False,
         max_concurrent_workers: Optional[int] = None,
         use_ray_compiled_dag: bool = False,
+        get_worker_results: bool = True,
         **kwargs,
     ) -> Any:
         """Runs the given method on all workers. Can be used in the following
@@ -256,7 +259,10 @@ class RayGPUExecutor(DistributedGPUExecutor):
                     for chan in output_channels:
                         chan.end_read()
             else:
-                ray_worker_outputs = ray.get(ray_worker_outputs)
+                if get_worker_results:
+                    ray_worker_outputs = ray.get(ray_worker_outputs)
+                else:
+                    ray_worker_outputs = []
 
         return [driver_worker_output] + ray_worker_outputs
 

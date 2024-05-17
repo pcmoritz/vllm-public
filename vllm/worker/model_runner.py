@@ -60,6 +60,7 @@ class PrepareInputData(msgspec.Struct, array_like=True):
     context_lens_tensor: Any = None
     use_cuda_graph: Any = None
     _cached_prefill_metadata: Any = None
+    _cached_decode_metadata: Any = None
 
     def to_dict(self):
         return {f: getattr(self, f) for f in self.__struct_fields__}

@@ -162,7 +162,7 @@ class ModelRunner:
 
         self.buffer = torch.empty(4096, dtype=torch.uint8)
         self.encoder = msgspec.msgpack.Encoder()
-        self.decoder = msgspec.msgpack.Decoder()
+        self.decoder = msgspec.msgpack.Decoder(type=PrepareInputData)
 
     def load_model(self) -> None:
         with CudaMemoryProfiler() as m:

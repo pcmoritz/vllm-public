@@ -98,7 +98,7 @@ class Worker(WorkerBase):
         self.gpu_cache: Optional[List[torch.tensor]] = None
         self.buffer = torch.empty(512, dtype=torch.uint8)
         self.encoder = msgspec.msgpack.Encoder()
-        self.decoder = msgspec.msgpack.Decoder()
+        self.decoder = msgspec.msgpack.Decoder(type=ExecuteModelData)
 
     def init_device(self) -> None:
         if self.device_config.device.type == "cuda":

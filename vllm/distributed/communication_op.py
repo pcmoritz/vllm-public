@@ -224,14 +224,13 @@ def _extract_tensors(data) -> List[torch.Tensor]:
 
 
 def broadcast_tensor_dict(
-    data = None,
+    tensor_dict = None,
     src: int = 0,
     group: Optional[ProcessGroup] = None,
     metadata_group: Optional[ProcessGroup] = None,
     buffer: torch.Tensor = None,
     encoder = None,
     decoder = None,
-    type = None,
 ) -> Optional[Dict[Any, Union[torch.Tensor, Any]]]:
     """Broadcast the input tensor dictionary.
     `group` is used to broadcast the tensors, while `metadata_group` is used
@@ -250,9 +249,9 @@ def broadcast_tensor_dict(
 
     rank = torch.distributed.get_rank()
     if rank == src:
-        tensors = _extract_tensors(data)
+        tensors = _extract_tensors(tensor_dict)
         buf = bytearray(64)
-        encoder.encode_into(data, buf, 4)
+        encoder.encode_into(tensor_dict, buf, 4)
         n = len(buf) - 4
         buf[:4] = n.to_bytes(4, "big")
         buffer[:len(buf)] = torch.frombuffer(buf, dtype=torch.uint8)
@@ -282,7 +281,7 @@ def broadcast_tensor_dict(
     else:
         torch.distributed.broadcast(buffer, src=src, group=metadata_group)
         n = int.from_bytes(bytearray(buffer[:4]), "big")
-        data = decoder.decode(bytearray(buffer[4:4+n]), type=type)
+        data = decoder.decode(bytearray(buffer[4:4+n]))
 
         tensor_dict = {}
         async_handles = []

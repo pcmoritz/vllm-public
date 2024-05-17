@@ -1,4 +1,3 @@
-from collections import namedtuple
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 import msgspec
@@ -191,7 +190,11 @@ def broadcast_object_list(obj_list: List[Any],
     return obj_list
 
 
-TensorMetadata = namedtuple("TensorMetadata", ["device", "dtype", "size"])
+@dataclass
+class TensorMetadata:
+    device: str
+    dtype: str
+    size: int
 
 
 TORCH_DTYPES = {

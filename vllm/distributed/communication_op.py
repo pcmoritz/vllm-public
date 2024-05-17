@@ -293,7 +293,7 @@ def broadcast_tensor_dict(
             recv_metadata_list = msgspec.msgpack.decode(bytearray(buffer[4:4+n]))
         else:
             recv_metadata_list = [None]
-            torch.distributed.broadcast(recv_metadata_list, src=src, group=metadata_group)
+            torch.distributed.broadcast_object_list(recv_metadata_list, src=src, group=metadata_group)
         assert recv_metadata_list[0] is not None
         tensor_dict = {}
         async_handles = []

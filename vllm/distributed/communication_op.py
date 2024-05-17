@@ -1,6 +1,7 @@
 from collections import namedtuple
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
+import msgspec
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -222,7 +223,8 @@ def broadcast_tensor_dict(
     tensor_dict: Optional[Dict[Any, Union[torch.Tensor, Any]]] = None,
     src: int = 0,
     group: Optional[ProcessGroup] = None,
-    metadata_group: Optional[ProcessGroup] = None
+    metadata_group: Optional[ProcessGroup] = None,
+    buffer: torch.Tensor,
 ) -> Optional[Dict[Any, Union[torch.Tensor, Any]]]:
     """Broadcast the input tensor dictionary.
     `group` is used to broadcast the tensors, while `metadata_group` is used
@@ -246,12 +248,23 @@ def broadcast_tensor_dict(
             tensor_dict,
             dict), (f"Expecting a dictionary, got {type(tensor_dict)}")
         metadata_list, tensor_list = _split_tensor_dict(tensor_dict)
-        # `metadata_list` lives in CPU memory.
-        # `broadcast_object_list` involves serialization and deserialization,
-        # all happening on CPU. Therefore, we can use the CPU group.
-        torch.distributed.broadcast_object_list([metadata_list],
-                                                src=src,
-                                                group=metadata_group)
+
+        if buffer:
+            encoder = msgspec.msgpack.Encoder()
+            buf = bytearray(64)
+            encoder.encode_into([metadata_list], buf, 4)
+            n = len(buf) - 4
+            buf[:4] = n.to_bytes(4, "big")
+            buffer[:len(buf)] = torch.frombuffer(buf, dtype=torch.uint8)
+            torch.distributed.broadcast(buffer, src=src, group=metadata_group)
+        else:
+            # `metadata_list` lives in CPU memory.
+            # `broadcast_object_list` involves serialization and deserialization,
+            # all happening on CPU. Therefore, we can use the CPU group.
+            torch.distributed.broadcast_object_list([metadata_list],
+                                                    src=src,
+                                                    group=metadata_group)
+        
         async_handles = []
         for tensor in tensor_list:
             if tensor.numel() == 0:
@@ -274,10 +287,13 @@ def broadcast_tensor_dict(
             async_handle.wait()
 
     else:
-        recv_metadata_list = [None]
-        torch.distributed.broadcast_object_list(recv_metadata_list,
-                                                src=src,
-                                                group=metadata_group)
+        if buffer:
+            torch.distributed.broadcast(buffer, src=src, group=metadata_group)
+            n = int.from_bytes(bytearray(buffer[:4]), "big")
+            recv_metadata_list = msgspec.msgpack.decode(bytearray(buffer[4:4+n]))
+        else:
+            recv_metadata_list = [None]
+            torch.distributed.broadcast(recv_metadata_list, src=src, group=metadata_group)
         assert recv_metadata_list[0] is not None
         tensor_dict = {}
         async_handles = []

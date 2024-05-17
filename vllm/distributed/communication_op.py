@@ -202,12 +202,6 @@ TORCH_DTYPES = {
 }
 
 
-class TensorMetadata(msgspec.Struct):
-    device: str
-    dtype: str
-    size: int
-
-
 def _extract_tensors(data) -> List[torch.Tensor]:
     result = data.__copy__()
     tensors = []
@@ -220,7 +214,7 @@ def _extract_tensors(data) -> List[torch.Tensor]:
             # index (e.g. "cuda:0"). We only need the device type.
             # receiving side will set the device index.
             device = "cpu" if value.is_cpu else "cuda"
-            setattr(result, f, TensorMetadata(device=device, dtype=str(value.dtype), size=value.size()))
+            setattr(result, f, {"device": device, "dtype": str(value.dtype), "size" : value.size()})
     return result, tensors
 
 
@@ -287,7 +281,7 @@ def broadcast_tensor_dict(
         async_handles = []
         for key in data.__struct_fields__:
             value = getattr(data, key)
-            if isinstance(value, TensorMetadata):
+            if isinstance(value, dict) and "dtype" in value:
                 tensor = torch.empty(value.size,
                                      dtype=TORCH_DTYPES[value.dtype],
                                      device=value.device)

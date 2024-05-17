@@ -209,6 +209,7 @@ class TensorMetadata(msgspec.Struct, array_like=True):
 
 
 def _extract_tensors(data) -> List[torch.Tensor]:
+    result = data.__copy__()
     tensors = []
     for f in data.__struct_fields__:
         value = getattr(data, f)
@@ -219,8 +220,8 @@ def _extract_tensors(data) -> List[torch.Tensor]:
             # index (e.g. "cuda:0"). We only need the device type.
             # receiving side will set the device index.
             device = "cpu" if value.is_cpu else "cuda"
-            setattr(data, f, TensorMetadata(device=device, dtype=str(value.dtype), size=value.size()))
-    return tensors
+            setattr(result, f, TensorMetadata(device=device, dtype=str(value.dtype), size=value.size()))
+    return result, tensors
 
 
 def broadcast_tensor_dict(
@@ -249,9 +250,9 @@ def broadcast_tensor_dict(
 
     rank = torch.distributed.get_rank()
     if rank == src:
-        tensors = _extract_tensors(data)
+        new_data, tensors = _extract_tensors(data)
         buf = bytearray(64)
-        encoder.encode_into(data, buf, 4)
+        encoder.encode_into(new_data, buf, 4)
         n = len(buf) - 4
         buf[:4] = n.to_bytes(4, "big")
         buffer[:len(buf)] = torch.frombuffer(buf, dtype=torch.uint8)

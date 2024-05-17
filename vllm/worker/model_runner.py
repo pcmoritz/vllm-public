@@ -1,5 +1,6 @@
+from dataclasses import dataclass, fields
 import time
-from typing import Dict, List, NamedTuple, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
 import msgspec
 import numpy as np
@@ -34,6 +35,26 @@ _BATCH_SIZE_ALIGNMENT = 8
 _BATCH_SIZES_TO_CAPTURE = [1, 2, 4] + [
     _BATCH_SIZE_ALIGNMENT * i for i in range(1, 33)
 ]
+
+
+class PrepareInputData(msgspec.Struct, array_like=True):
+    input_tokens: Any
+    input_positions: Any
+    selected_token_indices: Any
+    lora_requests: Any
+    lora_mapping: Any
+    multi_modal_input: Any
+    num_prefill_tokens: int
+    num_decode_tokens: int
+    slot_mapping: Any
+    num_prefills: int
+    seq_lens_tensor: Any
+    max_decode_seq_len: Optional[int]
+    block_tables: Any
+
+    def to_dict(self):
+        return {f: getattr(self, f) for f in self.__struct_fields__}
+
 
 
 class ModelInput(NamedTuple):
@@ -624,46 +645,40 @@ class ModelRunner:
                 seq_group_metadata_list, seq_lens, query_lens, self.device,
                 self.pin_memory)
 
-            metadata_dict = {
-                "input_tokens": input_tokens,
-                "input_positions": input_positions,
-                "selected_token_indices":
-                sampling_metadata.selected_token_indices,
-                "lora_requests": lora_requests,
-                "lora_mapping": lora_mapping,
-                "multi_modal_input": multi_modal_input,
-                "num_prefill_tokens": num_prefill_tokens,
-                "num_decode_tokens": num_decode_tokens,
-                "slot_mapping": slot_mapping,
-                "num_prefills": num_prefills,
-            }
+            data = PrepareInputData(
+                input_tokens=input_tokens,
+                input_positions=input_positions,
+                selected_token_indices=sampling_metadata.selected_token_indices,
+                lora_requests=lora_requests,
+                lora_mapping=lora_mapping,
+                multi_modal_input=multi_modal_input,
+                num_prefill_tokens=num_prefill_tokens,
+                num_decode_tokens=num_decode_tokens,
+                slot_mapping=slot_mapping,
+                num_prefills=num_prefills,
+            )
             if attn_metadata:
-                metadata_dict.update(attn_metadata.asdict_zerocopy())
-            broadcast_tensor_dict(metadata_dict, src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
+                for field in fields(attn_metadata):
+                    val = getattr(attn_metadata, field.name)
+                    setattr(data, field.name, val)
+            broadcast_tensor_dict(data, src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
         else:
-            metadata_dict = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
-            input_tokens = metadata_dict.pop("input_tokens")
-            input_positions = metadata_dict.pop("input_positions")
-            selected_token_indices = metadata_dict.pop(
-                "selected_token_indices")
-            lora_mapping = metadata_dict.pop("lora_mapping")
-            lora_requests = metadata_dict.pop("lora_requests")
-            multi_modal_input = metadata_dict.pop("multi_modal_input")
-            if metadata_dict:
+            data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder, type=PrepareInputData)
+            if data:
                 attn_metadata = self.attn_backend.make_metadata(
-                    **metadata_dict)
+                    **data.to_dict())
             else:
                 attn_metadata = None
             sampling_metadata = SamplingMetadata(
                 seq_groups=None,
-                selected_token_indices=selected_token_indices,
+                selected_token_indices=data.selected_token_indices,
                 categorized_sample_indices=None,
                 num_prompts=0,
             )
 
-        return (input_tokens, input_positions, attn_metadata,
-                sampling_metadata, lora_requests, lora_mapping,
-                multi_modal_input)
+        return (data.input_tokens, data.input_positions, attn_metadata,
+                sampling_metadata, data.lora_requests, data.lora_mapping,
+                data.multi_modal_input)
 
     @torch.inference_mode()
     def execute_model(

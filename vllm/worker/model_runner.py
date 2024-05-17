@@ -48,9 +48,9 @@ class PrepareInputData(msgspec.Struct, array_like=True):
     num_decode_tokens: int
     slot_mapping: Any
     num_prefills: int
-    seq_lens_tensor: Any
-    max_decode_seq_len: Optional[int]
-    block_tables: Any
+    seq_lens_tensor = None
+    max_decode_seq_len = None
+    block_tables = None
 
     def to_dict(self):
         return {f: getattr(self, f) for f in self.__struct_fields__}

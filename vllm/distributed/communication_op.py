@@ -224,7 +224,7 @@ def _extract_tensors(data) -> List[torch.Tensor]:
 
 
 def broadcast_tensor_dict(
-    tensor_dict = None,
+    data = None,
     src: int = 0,
     group: Optional[ProcessGroup] = None,
     metadata_group: Optional[ProcessGroup] = None,
@@ -240,7 +240,7 @@ def broadcast_tensor_dict(
     # Bypass the function if we are using only 1 GPU.
     if (not torch.distributed.is_initialized()
             or torch.distributed.get_world_size(group=group) == 1):
-        return tensor_dict
+        return data
 
     group = group or torch.distributed.group.WORLD
     metadata_group = metadata_group or get_cpu_world_group()
@@ -249,9 +249,9 @@ def broadcast_tensor_dict(
 
     rank = torch.distributed.get_rank()
     if rank == src:
-        tensors = _extract_tensors(tensor_dict)
+        tensors = _extract_tensors(data)
         buf = bytearray(64)
-        encoder.encode_into(tensor_dict, buf, 4)
+        encoder.encode_into(data, buf, 4)
         n = len(buf) - 4
         buf[:4] = n.to_bytes(4, "big")
         buffer[:len(buf)] = torch.frombuffer(buf, dtype=torch.uint8)
@@ -283,7 +283,6 @@ def broadcast_tensor_dict(
         n = int.from_bytes(bytearray(buffer[:4]), "big")
         data = decoder.decode(bytearray(buffer[4:4+n]))
 
-        tensor_dict = {}
         async_handles = []
         for key in data.__struct_fields__:
             value = getattr(data, key)
@@ -293,7 +292,7 @@ def broadcast_tensor_dict(
                                      device=value.device)
                 if tensor.numel() == 0:
                     # Skip broadcasting empty tensors.
-                    tensor_dict[key] = tensor
+                    setattr(data, key, tensor)
                     continue
                 if tensor.is_cpu:
                     # use metadata_group for CPU tensors
@@ -308,9 +307,7 @@ def broadcast_tensor_dict(
                                                          group=group,
                                                          async_op=True)
                 async_handles.append(handle)
-                tensor_dict[key] = tensor
-            else:
-                tensor_dict[key] = value
+                setattr(data, key, tensor)
         for async_handle in async_handles:
             async_handle.wait()
-    return tensor_dict
+    return data

@@ -197,7 +197,7 @@ TensorMetadata = namedtuple("TensorMetadata", ["device", "dtype", "size"])
 TORCH_DTYPES = {
     'torch.uint8': torch.uint8,
     'torch.int8': torch.int8,
-    'torch.int16', torch.int16,
+    'torch.int16': torch.int16,
     'torch.uint16', torch.uint16,
     'torch.int32': torch.int32,
     'torch.uint32': torch.uint32,

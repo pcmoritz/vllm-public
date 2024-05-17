@@ -673,7 +673,7 @@ class ModelRunner:
             data = PrepareInputData(**data_dict)
             broadcast_tensor_dict(data, src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
         else:
-            data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder, type=PrepareInputData)
+            data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
             if data:
                 attn_metadata = self.attn_backend.make_metadata(
                     **data.to_dict())

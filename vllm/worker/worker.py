@@ -270,7 +270,7 @@ class Worker(WorkerBase):
                 dtype=torch.int64).view(-1, 2)
             broadcast_tensor_dict(data, src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
         else:
-            data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder, type=ExecuteModelData)
+            data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
 
         self.cache_swap(data.blocks_to_swap_in, data.blocks_to_swap_out, data.blocks_to_copy)
 

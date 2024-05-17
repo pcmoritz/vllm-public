@@ -645,22 +645,22 @@ class ModelRunner:
                 seq_group_metadata_list, seq_lens, query_lens, self.device,
                 self.pin_memory)
 
-            data = PrepareInputData(
-                input_tokens=input_tokens,
-                input_positions=input_positions,
-                selected_token_indices=sampling_metadata.selected_token_indices,
-                lora_requests=lora_requests,
-                lora_mapping=lora_mapping,
-                multi_modal_input=multi_modal_input,
-                num_prefill_tokens=num_prefill_tokens,
-                num_decode_tokens=num_decode_tokens,
-                slot_mapping=slot_mapping,
-                num_prefills=num_prefills,
-            )
+            data_dict = {
+                "input_tokens": input_tokens,
+                "input_positions": input_positions,
+                "selected_token_indices":
+                sampling_metadata.selected_token_indices,
+                "lora_requests": lora_requests,
+                "lora_mapping": lora_mapping,
+                "multi_modal_input": multi_modal_input,
+                "num_prefill_tokens": num_prefill_tokens,
+                "num_decode_tokens": num_decode_tokens,
+                "slot_mapping": slot_mapping,
+                "num_prefills": num_prefills,
+            }
             if attn_metadata:
-                for field in fields(attn_metadata):
-                    val = getattr(attn_metadata, field.name)
-                    setattr(data, field.name, val)
+                data_dict.update(attn_metadata.asdict_zerocopy())
+            data = PrepareInputData(**data)
             broadcast_tensor_dict(data, src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
         else:
             data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder, type=PrepareInputData)

@@ -202,39 +202,36 @@ TORCH_DTYPES = {
 }
 
 
-def _split_tensor_dict(
-    tensor_dict: Dict[Any, Union[torch.Tensor, Any]]
-) -> Tuple[List[Tuple[str, Any]], List[torch.Tensor]]:
-    """Split the tensor dictionary into two parts:
-    1. A list of (key, value) pairs. If the value is a tensor, it is replaced
-         by its metadata.
-    2. A list of tensors.
-    """
-    metadata_list = []
-    tensor_list = []
-    for key, value in tensor_dict.items():
+class TensorMetadata(msgspec.Struct, array_like=True):
+    device: str
+    dtype: str
+    size: int
+
+
+def _extract_tensors(data) -> List[torch.Tensor]:
+    tensors = []
+    for f in data.__struct_fields__:
+        value = getattr(data, f)
         if isinstance(value, torch.Tensor):
+            tensors.append(value)
             # Note: we cannot use `value.device` here,
             # because it contains not only the device type but also the device
             # index (e.g. "cuda:0"). We only need the device type.
             # receiving side will set the device index.
             device = "cpu" if value.is_cpu else "cuda"
-            metadata_list.append(
-                (key, {"device": device, "dtype": str(value.dtype), "size": value.size()}))
-            tensor_list.append(value)
-        else:
-            metadata_list.append((key, value))
-    return metadata_list, tensor_list
+            setattr(data, f, TensorMetadata(device=device, dtype=str(value.dtype), size=value.size()))
+    return tensors
 
 
-def broadcast_tensor_dict(
-    tensor_dict: Optional[Dict[Any, Union[torch.Tensor, Any]]] = None,
+def broadcast_data(
+    data,
     src: int = 0,
     group: Optional[ProcessGroup] = None,
     metadata_group: Optional[ProcessGroup] = None,
     buffer: torch.Tensor = None,
     encoder = None,
     decoder = None,
+    type = None,
 ) -> Optional[Dict[Any, Union[torch.Tensor, Any]]]:
     """Broadcast the input tensor dictionary.
     `group` is used to broadcast the tensors, while `metadata_group` is used
@@ -253,29 +250,16 @@ def broadcast_tensor_dict(
 
     rank = torch.distributed.get_rank()
     if rank == src:
-        metadata_list: List[Tuple[Any, Any]] = []
-        assert isinstance(
-            tensor_dict,
-            dict), (f"Expecting a dictionary, got {type(tensor_dict)}")
-        metadata_list, tensor_list = _split_tensor_dict(tensor_dict)
-
-        if buffer is None:
-            # `metadata_list` lives in CPU memory.
-            # `broadcast_object_list` involves serialization and deserialization,
-            # all happening on CPU. Therefore, we can use the CPU group.
-            torch.distributed.broadcast_object_list([metadata_list],
-                                                    src=src,
-                                                    group=metadata_group)
-        else:
-            buf = bytearray(64)
-            encoder.encode_into([metadata_list], buf, 4)
-            n = len(buf) - 4
-            buf[:4] = n.to_bytes(4, "big")
-            buffer[:len(buf)] = torch.frombuffer(buf, dtype=torch.uint8)
-            torch.distributed.broadcast(buffer, src=src, group=metadata_group)
+        tensors = _extract_tensors(data)
+        buf = bytearray(64)
+        encoder.encode_into(data, buf, 4)
+        n = len(buf) - 4
+        buf[:4] = n.to_bytes(4, "big")
+        buffer[:len(buf)] = torch.frombuffer(buf, dtype=torch.uint8)
+        torch.distributed.broadcast(buffer, src=src, group=metadata_group)
         
         async_handles = []
-        for tensor in tensor_list:
+        for tensor in tensors:
             if tensor.numel() == 0:
                 # Skip broadcasting empty tensors.
                 continue
@@ -296,22 +280,18 @@ def broadcast_tensor_dict(
             async_handle.wait()
 
     else:
-        if buffer is None:
-            recv_metadata_list = [None]
-            torch.distributed.broadcast_object_list(recv_metadata_list, src=src, group=metadata_group)
-        else:
-            torch.distributed.broadcast(buffer, src=src, group=metadata_group)
-            n = int.from_bytes(bytearray(buffer[:4]), "big")
-            recv_metadata_list = decoder.decode(bytearray(buffer[4:4+n]))
+        torch.distributed.broadcast(buffer, src=src, group=metadata_group)
+        n = int.from_bytes(bytearray(buffer[:4]), "big")
+        data = decoder.decode(bytearray(buffer[4:4+n]), type=type)
 
-        assert recv_metadata_list[0] is not None
         tensor_dict = {}
         async_handles = []
-        for key, value in recv_metadata_list[0]:
-            if isinstance(value, dict):
-                tensor = torch.empty(value["size"],
-                                     dtype=TORCH_DTYPES[value["dtype"]],
-                                     device=value["device"])
+        for f in data.__struct_fields__:
+            value = getattr(data, f)
+            if isinstance(value, TensorMetadata):
+                tensor = torch.empty(value.size,
+                                     dtype=TORCH_DTYPES[value.dtype],
+                                     device=value.device)
                 if tensor.numel() == 0:
                     # Skip broadcasting empty tensors.
                     tensor_dict[key] = tensor

@@ -23,6 +23,13 @@ from vllm.worker.model_runner import ModelRunner
 from vllm.worker.worker_base import WorkerBase
 
 
+class ExecuteModelData(msgspec.Struct, array_like=True):
+    num_seq_groups: int
+    blocks_to_swap_in: Any
+    blocks_to_swap_out: Any
+    blocks_to_copy: Any
+
+
 class Worker(WorkerBase):
     """A worker class that executes (a partition of) the model on a GPU.
 
@@ -242,41 +249,33 @@ class Worker(WorkerBase):
         if self.is_driver_worker:
             assert seq_group_metadata_list is not None
             assert execute_model_req is not None
-            num_seq_groups = len(seq_group_metadata_list)
+            data = ExecuteModelData()
+            data.num_seq_groups = len(seq_group_metadata_list)
             # `blocks_to_swap_in` and `blocks_to_swap_out` are cpu tensors.
             # they contain parameters to launch cudamemcpyasync.
-            blocks_to_swap_in = torch.tensor(
+            data.blocks_to_swap_in = torch.tensor(
                 execute_model_req.blocks_to_swap_in,
                 device="cpu",
                 dtype=torch.int64).view(-1, 2)
-            blocks_to_swap_out = torch.tensor(
+            data.blocks_to_swap_out = torch.tensor(
                 execute_model_req.blocks_to_swap_out,
                 device="cpu",
                 dtype=torch.int64).view(-1, 2)
             # `blocks_to_copy` is a gpu tensor. The src and tgt of
             # blocks to copy are in the same device, and `blocks_to_copy`
             # can be used directly within cuda kernels.
-            blocks_to_copy = torch.tensor(execute_model_req.blocks_to_copy,
-                                          device=self.device,
-                                          dtype=torch.int64).view(-1, 2)
-            data: Dict[str, Any] = {
-                "num_seq_groups": num_seq_groups,
-                "blocks_to_swap_in": blocks_to_swap_in,
-                "blocks_to_swap_out": blocks_to_swap_out,
-                "blocks_to_copy": blocks_to_copy,
-            }
+            data.blocks_to_copy = torch.tensor(
+                execute_model_req.blocks_to_copy,
+                device=self.device,
+                dtype=torch.int64).view(-1, 2)
             broadcast_tensor_dict(data, src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
         else:
-            data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
-            num_seq_groups = data["num_seq_groups"]
-            blocks_to_swap_in = data["blocks_to_swap_in"]
-            blocks_to_swap_out = data["blocks_to_swap_out"]
-            blocks_to_copy = data["blocks_to_copy"]
+            data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder, type=ExecuteModelData)
 
-        self.cache_swap(blocks_to_swap_in, blocks_to_swap_out, blocks_to_copy)
+        self.cache_swap(data.blocks_to_swap_in, data.blocks_to_swap_out, data.blocks_to_copy)
 
         # If there is no input, we don't need to execute the model.
-        if num_seq_groups == 0:
+        if data.num_seq_groups == 0:
             return []
 
         output = self.model_runner.execute_model(seq_group_metadata_list,

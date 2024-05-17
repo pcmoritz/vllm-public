@@ -285,8 +285,8 @@ def broadcast_tensor_dict(
 
         tensor_dict = {}
         async_handles = []
-        for f in data.__struct_fields__:
-            value = getattr(data, f)
+        for key in data.__struct_fields__:
+            value = getattr(data, key)
             if isinstance(value, TensorMetadata):
                 tensor = torch.empty(value.size,
                                      dtype=TORCH_DTYPES[value.dtype],

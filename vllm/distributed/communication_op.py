@@ -200,7 +200,6 @@ TORCH_DTYPES = {
     'torch.int16': torch.int16,
     'torch.int32': torch.int32,
     'torch.int64': torch.int64,
-    'torch.uint64': torch.uint64,
     'torch.float16': torch.float16,
     'torch.bfloat16': torch.bfloat16,
     'torch.float32': torch.float32

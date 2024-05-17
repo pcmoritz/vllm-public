@@ -88,6 +88,7 @@ class Worker(WorkerBase):
         self.cache_engine: CacheEngine
         # Initialize gpu_cache as embedding models don't initialize kv_caches
         self.gpu_cache: Optional[List[torch.tensor]] = None
+        self.buffer = torch.empty(4096, dtype=torch.uint8)
 
     def init_device(self) -> None:
         if self.device_config.device.type == "cuda":
@@ -261,9 +262,9 @@ class Worker(WorkerBase):
                 "blocks_to_swap_out": blocks_to_swap_out,
                 "blocks_to_copy": blocks_to_copy,
             }
-            broadcast_tensor_dict(data, src=0)
+            broadcast_tensor_dict(data, src=0, buffer=self.buffer)
         else:
-            data = broadcast_tensor_dict(src=0)
+            data = broadcast_tensor_dict(src=0, buffer=self.buffer)
             num_seq_groups = data["num_seq_groups"]
             blocks_to_swap_in = data["blocks_to_swap_in"]
             blocks_to_swap_out = data["blocks_to_swap_out"]

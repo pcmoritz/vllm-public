@@ -51,7 +51,7 @@ class PrepareInputData(msgspec.Struct, array_like=True):
     seq_lens_tensor = None
     max_decode_seq_len = None
     block_tables = None
-    seq_lens_tensor: torch.Tensor
+    seq_lens_tensor: torch.Tensor = None
 
     def to_dict(self):
         return {f: getattr(self, f) for f in self.__struct_fields__}

@@ -675,8 +675,7 @@ class ModelRunner:
         else:
             data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
             if data:
-                attn_metadata = self.attn_backend.make_metadata()
-                attn_metadata.load_from(data)
+                attn_metadata = self.attn_backend.load_metadata(data)
             else:
                 attn_metadata = None
             sampling_metadata = SamplingMetadata(

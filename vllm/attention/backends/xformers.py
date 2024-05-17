@@ -32,6 +32,29 @@ class XFormersBackend(AttentionBackend):
         return XFormersMetadata(*args, **kwargs)
 
     @staticmethod
+    def load_metadata(data):
+        return XFormersMetadata(
+            seq_lens_tensor=data.seq_lens_tensor,
+            max_decode_seq_len=data.max_decode_seq_len,
+            block_tables=data.block_tables,
+            num_prefills=data.num_prefills,
+            num_prefill_tokens=data.num_prefill_tokens,
+            num_decode_tokens=data.num_decode_tokens,
+            slot_mapping=data.slot_mapping,
+            seq_lens=data.seq_lens,
+            max_query_len=data.max_query_len,
+            max_prefill_seq_len=data.max_prefill_seq_len,
+            query_start_loc=data.query_start_loc,
+            seq_start_loc=data.seq_start_loc,
+            context_lens_tensor=data.context_lens_tensor,
+            use_cuda_graph=data.use_cuda_graph,
+            _cached_prefill_metadata=data._cached_prefill_metadata,
+            _cached_decode_metadata=data._cached_decode_metadata,
+        )
+
+
+
+    @staticmethod
     def get_kv_cache_shape(
         num_blocks: int,
         block_size: int,
@@ -115,11 +138,6 @@ class XFormersMetadata(AttentionMetadata, PagedAttentionMetadata):
         # from xformer API.
         # will not appear in the __repr__ and __init__
         self.attn_bias: Optional[List[AttentionBias]] = None
-
-    def load_from(prepare_input_data):
-        for name in fields(self):
-            val = getattr(prepare_input_data, name)
-            setattr(self, name, val)
 
     @property
     def prefill_metadata(self) -> Optional["XFormersMetadata"]:

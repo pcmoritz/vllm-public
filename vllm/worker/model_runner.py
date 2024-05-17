@@ -53,6 +53,7 @@ class PrepareInputData(msgspec.Struct, array_like=True):
     block_tables: Any = None
     seq_lens_tensor: Any = None
     seq_lens: Any = None
+    max_query_len: Any = None
 
     def to_dict(self):
         return {f: getattr(self, f) for f in self.__struct_fields__}

@@ -70,6 +70,7 @@ class ModelInput(NamedTuple):
     num_prefill_tokens: int
     num_decode_tokens: int
     num_prefills: int
+    seq_lens_tensor: torch.Tensor
 
     @classmethod
     def empty(cls, device):

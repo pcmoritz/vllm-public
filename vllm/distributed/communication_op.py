@@ -224,7 +224,7 @@ def _extract_tensors(data) -> List[torch.Tensor]:
 
 
 def broadcast_tensor_dict(
-    data,
+    data = None,
     src: int = 0,
     group: Optional[ProcessGroup] = None,
     metadata_group: Optional[ProcessGroup] = None,

@@ -194,6 +194,15 @@ def broadcast_object_list(obj_list: List[Any],
 TensorMetadata = namedtuple("TensorMetadata", ["device", "dtype", "size"])
 
 
+TORCH_DTYPES = {
+    'uint8': torch.uint8,
+    'int8': torch.int8,
+    'float16': torch.float16,
+    'bfloat16': torch.bfloat16,
+    'float32': torch.float32
+}
+
+
 def _split_tensor_dict(
     tensor_dict: Dict[Any, Union[torch.Tensor, Any]]
 ) -> Tuple[List[Tuple[str, Any]], List[torch.Tensor]]:
@@ -212,7 +221,7 @@ def _split_tensor_dict(
             # receiving side will set the device index.
             device = "cpu" if value.is_cpu else "cuda"
             metadata_list.append(
-                (key, TensorMetadata(device, value.dtype, value.size())))
+                (key, TensorMetadata(device, str(value.dtype), value.size())))
             tensor_list.append(value)
         else:
             metadata_list.append((key, value))
@@ -301,7 +310,7 @@ def broadcast_tensor_dict(
         for key, value in recv_metadata_list[0]:
             if isinstance(value, TensorMetadata):
                 tensor = torch.empty(value.size,
-                                     dtype=value.dtype,
+                                     dtype=TORCH_DTYPES[value.dtype],
                                      device=value.device)
                 if tensor.numel() == 0:
                     # Skip broadcasting empty tensors.

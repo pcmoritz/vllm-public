@@ -51,6 +51,7 @@ class PrepareInputData(msgspec.Struct, array_like=True):
     seq_lens_tensor = None
     max_decode_seq_len = None
     block_tables = None
+    seq_lens_tensor: torch.Tensor
 
     def to_dict(self):
         return {f: getattr(self, f) for f in self.__struct_fields__}
@@ -70,7 +71,6 @@ class ModelInput(NamedTuple):
     num_prefill_tokens: int
     num_decode_tokens: int
     num_prefills: int
-    seq_lens_tensor: torch.Tensor
 
     @classmethod
     def empty(cls, device):

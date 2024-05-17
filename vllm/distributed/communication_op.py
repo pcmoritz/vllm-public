@@ -282,9 +282,9 @@ def broadcast_tensor_dict(
         for key in data.__struct_fields__:
             value = getattr(data, key)
             if isinstance(value, dict) and "dtype" in value:
-                tensor = torch.empty(value.size,
-                                     dtype=TORCH_DTYPES[value.dtype],
-                                     device=value.device)
+                tensor = torch.empty(value["size"],
+                                     dtype=TORCH_DTYPES[value["dtype"]],
+                                     device=value["device"])
                 if tensor.numel() == 0:
                     # Skip broadcasting empty tensors.
                     setattr(data, key, tensor)

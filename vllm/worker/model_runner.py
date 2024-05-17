@@ -44,14 +44,14 @@ class PrepareInputData(msgspec.Struct, array_like=True):
     lora_requests: Any = None
     lora_mapping: Any = None
     multi_modal_input: Any = None
-    num_prefill_tokens: int = None
-    num_decode_tokens: int = None
+    num_prefill_tokens: Any = None
+    num_decode_tokens: Any = None
     slot_mapping: Any = None
-    num_prefills: int = None
-    seq_lens_tensor = None
-    max_decode_seq_len = None
-    block_tables = None
-    seq_lens_tensor: torch.Tensor = None
+    num_prefills: Any = None
+    seq_lens_tensor: Any = None
+    max_decode_seq_len: Any = None
+    block_tables: Any = None
+    seq_lens_tensor: Any = None
 
     def to_dict(self):
         return {f: getattr(self, f) for f in self.__struct_fields__}

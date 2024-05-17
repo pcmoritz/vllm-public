@@ -1,5 +1,5 @@
 """Attention layer with xFormers and PagedAttention."""
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Dict, List, Optional, Tuple, Type
 
 import torch
@@ -115,6 +115,11 @@ class XFormersMetadata(AttentionMetadata, PagedAttentionMetadata):
         # from xformer API.
         # will not appear in the __repr__ and __init__
         self.attn_bias: Optional[List[AttentionBias]] = None
+
+    def load_from(prepare_input_data):
+        for name in fields(self):
+            val = getattr(prepare_input_data, name)
+            setattr(self, name, val)
 
     @property
     def prefill_metadata(self) -> Optional["XFormersMetadata"]:

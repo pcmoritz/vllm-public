@@ -38,16 +38,16 @@ _BATCH_SIZES_TO_CAPTURE = [1, 2, 4] + [
 
 
 class PrepareInputData(msgspec.Struct, array_like=True):
-    input_tokens: Any
-    input_positions: Any
-    selected_token_indices: Any
-    lora_requests: Any
-    lora_mapping: Any
-    multi_modal_input: Any
-    num_prefill_tokens: int
-    num_decode_tokens: int
-    slot_mapping: Any
-    num_prefills: int
+    input_tokens: Any = None
+    input_positions: Any = None
+    selected_token_indices: Any = None
+    lora_requests: Any = None
+    lora_mapping: Any = None
+    multi_modal_input: Any = None
+    num_prefill_tokens: int = None
+    num_decode_tokens: int = None
+    slot_mapping: Any = None
+    num_prefills: int = None
     seq_lens_tensor = None
     max_decode_seq_len = None
     block_tables = None

@@ -3,6 +3,7 @@ import gc
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+import msgspec
 import torch
 import torch.distributed
 

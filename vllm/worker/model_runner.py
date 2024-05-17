@@ -1,6 +1,7 @@
 import time
 from typing import Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
+import msgspec
 import numpy as np
 import torch
 import torch.nn as nn

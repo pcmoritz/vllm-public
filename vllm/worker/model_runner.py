@@ -660,7 +660,7 @@ class ModelRunner:
             }
             if attn_metadata:
                 data_dict.update(attn_metadata.asdict_zerocopy())
-            data = PrepareInputData(**data)
+            data = PrepareInputData(**data_dict)
             broadcast_tensor_dict(data, src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
         else:
             data = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder, type=PrepareInputData)

@@ -224,7 +224,7 @@ def broadcast_tensor_dict(
     src: int = 0,
     group: Optional[ProcessGroup] = None,
     metadata_group: Optional[ProcessGroup] = None,
-    buffer: torch.Tensor,
+    buffer: torch.Tensor = None,
 ) -> Optional[Dict[Any, Union[torch.Tensor, Any]]]:
     """Broadcast the input tensor dictionary.
     `group` is used to broadcast the tensors, while `metadata_group` is used

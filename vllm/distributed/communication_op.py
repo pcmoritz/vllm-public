@@ -202,7 +202,7 @@ TORCH_DTYPES = {
 }
 
 
-class TensorMetadata(msgspec.Struct, array_like=True):
+class TensorMetadata(msgspec.Struct):
     device: str
     dtype: str
     size: int

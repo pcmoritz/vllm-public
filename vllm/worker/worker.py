@@ -88,7 +88,7 @@ class Worker(WorkerBase):
         self.cache_engine: CacheEngine
         # Initialize gpu_cache as embedding models don't initialize kv_caches
         self.gpu_cache: Optional[List[torch.tensor]] = None
-        self.buffer = torch.empty(4096, dtype=torch.uint8)
+        self.buffer = torch.empty(512, dtype=torch.uint8)
 
     def init_device(self) -> None:
         if self.device_config.device.type == "cuda":

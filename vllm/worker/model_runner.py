@@ -129,6 +129,8 @@ class ModelRunner:
         self.lora_manager: Optional[LRUCacheWorkerLoRAManager] = None
 
         self.buffer = torch.empty(4096, dtype=torch.uint8)
+        self.encoder = msgspec.msgpack.Encoder()
+        self.decoder = msgspec.msgpack.Decoder()
 
     def load_model(self) -> None:
         with CudaMemoryProfiler() as m:
@@ -636,9 +638,9 @@ class ModelRunner:
             }
             if attn_metadata:
                 metadata_dict.update(attn_metadata.asdict_zerocopy())
-            broadcast_tensor_dict(metadata_dict, src=0, buffer=self.buffer)
+            broadcast_tensor_dict(metadata_dict, src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
         else:
-            metadata_dict = broadcast_tensor_dict(src=0, buffer=self.buffer)
+            metadata_dict = broadcast_tensor_dict(src=0, buffer=self.buffer, encoder=self.encoder, decoder=self.decoder)
             input_tokens = metadata_dict.pop("input_tokens")
             input_positions = metadata_dict.pop("input_positions")
             selected_token_indices = metadata_dict.pop(

@@ -14,7 +14,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 def main(dtype: str):
-    method = fused_moe
+    method = fused_silu
     for bs in [
             1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 256, 512, 1024, 1536,
             2048, 3072, 4096
@@ -22,11 +22,11 @@ def main(dtype: str):
         run_grid(bs, method=method, dtype=dtype)
 
 def run_grid(bs, method, dtype: str):
-    d_model = 4096
+    d_model = 8192
     num_total_experts = 8
     top_k = 2
-    tp_size = 2
-    model_intermediate_size = 14336
+    tp_size = 4
+    model_intermediate_size = 28672
     num_layers = 32
     num_calls = 100
 
@@ -63,8 +63,6 @@ def run_grid(bs, method, dtype: str):
                     num_calls=num_calls,
                     bs=bs,
                     d_model=d_model,
-                    num_total_experts=num_total_experts,
-                    top_k=top_k,
                     tp_size=tp_size,
                     model_intermediate_size=model_intermediate_size,
                     method=method,
@@ -80,8 +78,6 @@ def run_grid(bs, method, dtype: str):
                 num_calls=num_calls,
                 bs=bs,
                 d_model=d_model,
-                num_total_experts=num_total_experts,
-                top_k=top_k,
                 tp_size=tp_size,
                 model_intermediate_size=model_intermediate_size,
                 method=method,
@@ -104,9 +100,20 @@ def run_grid(bs, method, dtype: str):
     print("best_time_us", best_time_us)
     print("best_config", best_config)
 
+    filename = "config.json"
+    print(f"writing config to file {filename}")
+    existing_content = {}
+    if os.path.exists(filename):
+        with open(filename, "r") as f:
+            existing_content = json.load(f)
+    existing_content[str(bs)] = best_config
+    with open(filename, "w") as f:
+        json.dump(existing_content, f, indent=4)
+        f.write("\n")
 
-def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
-               top_k: int, tp_size: int, model_intermediate_size: int, method,
+
+def run_timing(num_calls: int, bs: int, d_model: int,
+               tp_size: int, model_intermediate_size: int, method,
                config, dtype: str) -> float:
     shard_intermediate_size = model_intermediate_size // tp_size
 
@@ -117,7 +124,7 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
     )
 
     w = torch.rand(
-        (shard_intermediate_size, d_model),
+        (d_model, shard_intermediate_size),
         device=hidden_states.device,
         dtype=hidden_states.dtype,
     )
@@ -127,7 +134,7 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
 
     start_event.record()
     for i in range(num_calls):
-        hidden_states = method(
+        result = method(
             hidden_states,
             w,
             override_config=config,
@@ -137,3 +144,19 @@ def run_timing(num_calls: int, bs: int, d_model: int, num_total_experts: int,
 
     dur_ms = start_event.elapsed_time(end_event) / num_calls
     return dur_ms
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        prog='benchmark_mixtral_moe',
+        description='Benchmark and tune the fused_silu kernel',
+    )
+    parser.add_argument(
+        '--dtype',
+        type=str,
+        default='auto',
+        choices=['float8', 'float16'],
+        help='Data type used for fused_silu kernel computations',
+    )
+    args = parser.parse_args()
+    sys.exit(main(args.dtype))

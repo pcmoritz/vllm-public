@@ -36,11 +36,11 @@ def run_grid(bs, method, dtype: str):
     configs = []
 
     for block_size_n in [32, 64, 128, 256]:
-        for block_size_m in [16, 32, 64, 128, 256]:
-            for block_size_k in [64, 128, 256]:
+        for block_size_m in [16, 32, 64]:
+            for block_size_k in [32, 64, 128]:
                 for group_size_m in [1, 16, 32, 64]:
-                    for num_warps in [4, 8]:
-                        for num_stages in [2, 3, 4, 5]:
+                    for num_warps in [2, 4, 8]:
+                        for num_stages in [2, 3, 4, 5, 6]:
                             configs.append({
                                 "BLOCK_SIZE_M": block_size_m,
                                 "BLOCK_SIZE_N": block_size_n,

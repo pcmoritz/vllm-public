@@ -123,7 +123,13 @@ def run_timing(num_calls: int, bs: int, d_model: int,
         dtype=torch.float16,
     )
 
-    w = torch.rand(
+    w1 = torch.rand(
+        (d_model, shard_intermediate_size),
+        device=hidden_states.device,
+        dtype=hidden_states.dtype,
+    )
+
+    w2 = torch.rand(
         (d_model, shard_intermediate_size),
         device=hidden_states.device,
         dtype=hidden_states.dtype,
@@ -136,7 +142,8 @@ def run_timing(num_calls: int, bs: int, d_model: int,
     for i in range(num_calls):
         result = method(
             hidden_states,
-            w,
+            w1,
+            w2,
             override_config=config,
         )
     end_event.record()

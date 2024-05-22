@@ -227,7 +227,15 @@ class Fp8LinearMethod(LinearMethodBase):
     def apply(self,
               layer: torch.nn.Module,
               x: torch.Tensor,
-              bias: Optional[torch.Tensor] = None) -> torch.Tensor:
+              bias: Optional[torch.Tensor] = None,
+              activation: Optional[str] = None) -> torch.Tensor:
+        if activation == "silu":
+            print("XXX", layer.weight)
+            # from vllm.model_executor.layers.fused_silu.fused_silu import fused_silu
+            # qinput, x_scale = ops.scaled_fp8_quant(x, layer.act_scale)
+            # return fused_silu(x, layer.weight[0:])
+
+
         # ops.scaled_fp8_quant supports both dynamic and static quant.
         #   If dynamic, layer.act_scale is None and x_scale computed from x.
         #   If static,  layer.act_scale is scalar and x_scale set to act_scale.

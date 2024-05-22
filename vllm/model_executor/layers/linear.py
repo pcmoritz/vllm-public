@@ -89,7 +89,10 @@ class UnquantizedLinearMethod(LinearMethodBase):
     def apply(self,
               layer: torch.nn.Module,
               x: torch.Tensor,
-              bias: Optional[torch.Tensor] = None) -> torch.Tensor:
+              bias: Optional[torch.Tensor] = None,
+              activation: Optional[str] = None) -> torch.Tensor:
+        if activation is not None:
+            raise NotImplementedError(f"Fused activation {activation} not supported")
         weight = layer.weight
         if self.separate_bias_add:
             if bias is not None:
@@ -116,6 +119,7 @@ class LinearBase(torch.nn.Module):
         output_size: int,
         skip_bias_add: bool = False,
         params_dtype: Optional[torch.dtype] = None,
+        activation: Optional[str] = None,
         quant_config: Optional[QuantizationConfig] = None,
     ):
         super().__init__()
@@ -132,6 +136,7 @@ class LinearBase(torch.nn.Module):
                 QuantizeMethodBase] = UnquantizedLinearMethod()
         else:
             self.quant_method = quant_config.get_quant_method(self)
+        self.activation = activation
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
@@ -156,10 +161,11 @@ class ReplicatedLinear(LinearBase):
         bias: bool = True,
         skip_bias_add: bool = False,
         params_dtype: Optional[torch.dtype] = None,
+        activation: Optional[str] = None,
         quant_config: Optional[QuantizationConfig] = None,
     ):
         super().__init__(input_size, output_size, skip_bias_add, params_dtype,
-                         quant_config)
+                         activation, quant_config)
 
         # All the linear layer supports quant method.
         assert self.quant_method is not None
@@ -218,11 +224,12 @@ class ColumnParallelLinear(LinearBase):
         gather_output: bool = False,
         skip_bias_add: bool = False,
         params_dtype: Optional[torch.dtype] = None,
+        activation: Optional[str] = None,
         quant_config: Optional[QuantizationConfig] = None,
         output_sizes: Optional[List[int]] = None,
     ):
         super().__init__(input_size, output_size, skip_bias_add, params_dtype,
-                         quant_config)
+                         activation, quant_config)
 
         self.gather_output = gather_output
 
@@ -325,13 +332,14 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
         gather_output: bool = False,
         skip_bias_add: bool = False,
         params_dtype: Optional[torch.dtype] = None,
+        activation: Optional[str] = None,
         quant_config: Optional[QuantizationConfig] = None,
     ):
         self.output_sizes = output_sizes
         tp_size = get_tensor_model_parallel_world_size()
         assert all(output_size % tp_size == 0 for output_size in output_sizes)
         super().__init__(input_size, sum(output_sizes), bias, gather_output,
-                         skip_bias_add, params_dtype, quant_config,
+                         skip_bias_add, params_dtype, activation, quant_config,
                          self.output_sizes)
 
     def weight_loader(self,

@@ -61,17 +61,21 @@ class LlamaMLP(nn.Module):
         bias: bool = False,
     ) -> None:
         super().__init__()
+
+        if hidden_act != "silu":
+            raise ValueError(f"Unsupported activation: {hidden_act}. "
+                             "Only silu is supported for now.")
+
         self.gate_up_proj = MergedColumnParallelLinear(
             hidden_size, [intermediate_size] * 2,
             bias=bias,
+            activation=hidden_act,
             quant_config=quant_config)
         self.down_proj = RowParallelLinear(intermediate_size,
                                            hidden_size,
                                            bias=bias,
                                            quant_config=quant_config)
-        if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. "
-                             "Only silu is supported for now.")
+
         self.act_fn = SiluAndMul()
 
     def forward(self, x):

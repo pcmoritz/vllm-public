@@ -460,6 +460,7 @@ class QKVParallelLinear(ColumnParallelLinear):
         bias: bool = True,
         skip_bias_add: bool = False,
         params_dtype: Optional[torch.dtype] = None,
+        activation: Optional[str] = None,
         quant_config: Optional[QuantizationConfig] = None,
     ):
         self.hidden_size = hidden_size
@@ -488,7 +489,7 @@ class QKVParallelLinear(ColumnParallelLinear):
         ]
 
         super().__init__(input_size, output_size, bias, False, skip_bias_add,
-                         params_dtype, quant_config, output_sizes)
+                         params_dtype, activation, quant_config, output_sizes)
 
     def weight_loader(self,
                       param: Parameter,

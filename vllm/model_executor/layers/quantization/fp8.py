@@ -205,8 +205,8 @@ class Fp8LinearMethod(LinearMethodBase):
 
             # WEIGHT
             #   Transpose weight for passing to torch._scaled_mm
-            weight = layer.weight
-            layer.weight = Parameter(weight.t(), requires_grad=False)
+            # weight = layer.weight
+            # layer.weight = Parameter(weight.t(), requires_grad=False)
 
             # ACT_SCALE
             #   Dynamic: set to None (required input to ops.scaled_fp8_quant).

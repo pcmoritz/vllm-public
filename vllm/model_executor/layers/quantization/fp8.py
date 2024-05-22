@@ -230,7 +230,7 @@ class Fp8LinearMethod(LinearMethodBase):
               bias: Optional[torch.Tensor] = None,
               activation: Optional[str] = None) -> torch.Tensor:
         if activation == "silu":
-            print("XXX", layer.weight)
+            print("XXX", layer.weight.shape)
             # from vllm.model_executor.layers.fused_silu.fused_silu import fused_silu
             # qinput, x_scale = ops.scaled_fp8_quant(x, layer.act_scale)
             # return fused_silu(x, layer.weight[0:])

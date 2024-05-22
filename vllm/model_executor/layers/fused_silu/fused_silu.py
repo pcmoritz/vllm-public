@@ -45,7 +45,9 @@ def matmul_kernel(
     pid_m = first_pid_m + (pid % group_size_m)
     pid_n = (pid % num_pid_in_group) // group_size_m
 
-    ab_scale = tl.load(a_scale_ptr) * tl.load(b_scale_ptr)
+    a_scale = tl.load(a_scale_ptr)
+    b_scale = tl.load(b_scale_ptr)
+    ab_scale = a_scale * b_scale
     c_scale = tl.load(c_scale_ptr)
 
     # ----------------------------------------------------------

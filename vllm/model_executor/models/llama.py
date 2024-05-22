@@ -62,6 +62,8 @@ class LlamaMLP(nn.Module):
     ) -> None:
         super().__init__()
 
+        print("QQQ", quant_config)
+
         if hidden_act != "silu":
             raise ValueError(f"Unsupported activation: {hidden_act}. "
                              "Only silu is supported for now.")
@@ -79,8 +81,8 @@ class LlamaMLP(nn.Module):
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
-        gate_up, _ = self.gate_up_proj(x)
-        x = self.act_fn(gate_up)
+        x, _ = self.gate_up_proj(x)
+        # x = self.act_fn(gate_up)
         x, _ = self.down_proj(x)
         return x
 
@@ -138,13 +140,13 @@ class LlamaAttention(nn.Module):
             self.total_num_heads,
             self.total_num_kv_heads,
             bias=bias,
-            quant_config=quant_config,
+            quant_config=None,
         )
         self.o_proj = RowParallelLinear(
             self.total_num_heads * self.head_dim,
             hidden_size,
             bias=bias,
-            quant_config=quant_config,
+            quant_config=None,
         )
 
         self.rotary_emb = get_rope(

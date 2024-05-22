@@ -180,7 +180,7 @@ class Fp8LinearMethod(LinearMethodBase):
         if not self.quant_config.is_checkpoint_fp8_serialized:
             qweight, weight_scale = ops.scaled_fp8_quant(layer.weight,
                                                          scale=None)
-            layer.weight = Parameter(qweight.t(), requires_grad=False)
+            layer.weight = Parameter(qweight, requires_grad=False)
             layer.weight_scale = Parameter(weight_scale, requires_grad=False)
             layer.logical_widths = None
             layer.act_scale = None
@@ -230,10 +230,28 @@ class Fp8LinearMethod(LinearMethodBase):
               bias: Optional[torch.Tensor] = None,
               activation: Optional[str] = None) -> torch.Tensor:
         if activation == "silu":
-            print("XXX", layer.weight.shape)
-            # from vllm.model_executor.layers.fused_silu.fused_silu import fused_silu
-            # qinput, x_scale = ops.scaled_fp8_quant(x, layer.act_scale)
-            # return fused_silu(x, layer.weight[0:])
+            # print("XXX", layer.weight.shape, layer.weight.is_contiguous())
+            from vllm.model_executor.layers.fused_silu.fused_silu import fused_silu
+            qinput, x_scale = ops.scaled_fp8_quant(x, layer.act_scale)
+            shape = layer.weight.shape
+            # TODO: Need to adapt second scale
+            c_scale = torch.ones(1,
+                         device=x.device,
+                         dtype=torch.float32)
+            return fused_silu(
+                qinput,
+                layer.weight[:shape[0]//2,:].t(),
+                layer.weight[shape[0]//2:,:].t(),
+                x_scale, layer.weight_scale, c_scale,
+                override_config={
+                    "BLOCK_SIZE_M": 16,
+                    "BLOCK_SIZE_N": 64,
+                    "BLOCK_SIZE_K": 64,
+                    "GROUP_SIZE_M": 1,
+                    "num_warps": 2,
+                    "num_stages": 5
+                }
+            )
 
 
         # ops.scaled_fp8_quant supports both dynamic and static quant.

@@ -37,7 +37,7 @@ def run_grid(bs, method, dtype: str):
 
     for block_size_n in [32, 64, 128, 256]:
         for block_size_m in [16, 32, 64]:
-            for block_size_k in [32, 64, 128]:
+            for block_size_k in [32, 64, 128, 256]:
                 for group_size_m in [1, 16, 32, 64]:
                     for num_warps in [2, 4, 8]:
                         for num_stages in [2, 3, 4, 5, 6]:
@@ -121,19 +121,29 @@ def run_timing(num_calls: int, bs: int, d_model: int,
         (bs, d_model),
         device="cuda:0",
         dtype=torch.float16,
-    )
+    ).to(torch.float8_e4m3fn)
 
     w1 = torch.rand(
         (d_model, shard_intermediate_size),
         device=hidden_states.device,
-        dtype=hidden_states.dtype,
-    )
+        dtype=torch.float16,
+    ).to(torch.float8_e4m3fn)
 
     w2 = torch.rand(
         (d_model, shard_intermediate_size),
         device=hidden_states.device,
-        dtype=hidden_states.dtype,
-    )
+        dtype=torch.float16,
+    ).to(torch.float8_e4m3fn)
+
+    a_scale = torch.ones(1,
+                         device=hidden_states.device,
+                         dtype=torch.float32)
+    b_scale = torch.ones(1,
+                         device=hidden_states.device,
+                         dtype=torch.float32)
+    c_scale = torch.ones(1,
+                         device=hidden_states.device,
+                         dtype=torch.float32)
 
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
@@ -144,6 +154,9 @@ def run_timing(num_calls: int, bs: int, d_model: int,
             hidden_states,
             w1,
             w2,
+            a_scale,
+            b_scale,
+            c_scale,
             override_config=config,
         )
     end_event.record()

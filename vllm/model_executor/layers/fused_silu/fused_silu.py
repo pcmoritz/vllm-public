@@ -15,6 +15,7 @@ def silu(input):
 def matmul_kernel(
         # Pointers to matrices
         a_ptr, b1_ptr, b2_ptr, c_ptr,
+        a_scale_ptr, b_scale_ptr, c_scale_ptr,
         # Matrix dimensions
         M, N, K,
         # The stride variables represent how much to increase the ptr by when moving by 1
@@ -43,6 +44,9 @@ def matmul_kernel(
     group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
     pid_m = first_pid_m + (pid % group_size_m)
     pid_n = (pid % num_pid_in_group) // group_size_m
+
+    ab_scale = tl.load(a_scale_ptr) * tl.load(b_scale_ptr)
+    c_scale = tl.load(c_scale_ptr)
 
     # ----------------------------------------------------------
     # Create pointers for the first blocks of A and B.
@@ -79,7 +83,7 @@ def matmul_kernel(
         b1_ptrs += BLOCK_SIZE_K * stride_bk
         b2_ptrs += BLOCK_SIZE_K * stride_bk
 
-    c = (acc1 * silu(acc2)).to(tl.float16)
+    c = (acc1 * ab_scale * silu(acc2 * ab_scale) / c_scale).to(tl.float8e4nv)
 
     # -----------------------------------------------------------
     # Write back the block of the output matrix C with masks.
@@ -89,7 +93,7 @@ def matmul_kernel(
     c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
     tl.store(c_ptrs, c, mask=c_mask)
 
-def fused_silu(a, b1, b2, override_config: Optional[Dict[str, Any]] = None):
+def fused_silu(a, b1, b2, a_scale, b_scale, c_scale, override_config: Optional[Dict[str, Any]] = None):
 
     if not override_config:
         override_config = {}
@@ -102,15 +106,16 @@ def fused_silu(a, b1, b2, override_config: Optional[Dict[str, Any]] = None):
     M, K = a.shape
     K, N = b1.shape
     # Allocates output.
-    c = torch.empty((M, N), device=a.device, dtype=torch.float16)
+    c = torch.empty((M, N), device=a.device, dtype=torch.float8_e4m3fn)
     # 1D launch kernel where each block gets its own program.
     grid = lambda META: (triton.cdiv(M, META['BLOCK_SIZE_M']) * triton.cdiv(N, META['BLOCK_SIZE_N']), )
     matmul_kernel[grid](
-        a, b1, b2, c,  #
-        M, N, K,  #
-        a.stride(0), a.stride(1),  #
-        b1.stride(0), b1.stride(1),  #
-        c.stride(0), c.stride(1),  #
+        a, b1, b2, c,
+        a_scale, b_scale, c_scale,
+        M, N, K,
+        a.stride(0), a.stride(1),
+        b1.stride(0), b1.stride(1),
+        c.stride(0), c.stride(1),
         **override_config,
     )
     return c

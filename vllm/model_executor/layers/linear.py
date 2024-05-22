@@ -629,7 +629,7 @@ class RowParallelLinear(LinearBase):
         quant_config: Optional[QuantizationConfig] = None,
     ):
         super().__init__(input_size, output_size, skip_bias_add, params_dtype,
-                         quant_config)
+                         activation=None, quant_config=quant_config)
 
         self.input_is_parallel = input_is_parallel
         self.reduce_results = reduce_results

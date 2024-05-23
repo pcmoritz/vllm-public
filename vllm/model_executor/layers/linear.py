@@ -280,12 +280,12 @@ class ColumnParallelLinear(LinearBase):
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
 
-    def forward(self, input_):
+    def forward(self, input_, output_scale=None):
         bias = self.bias if not self.skip_bias_add else None
 
         # Matrix multiply.
         assert self.quant_method is not None
-        output_parallel = self.quant_method.apply(self, input_, bias, self.activation)
+        output_parallel = self.quant_method.apply(self, input_, bias, self.activation, output_scale)
         if self.gather_output:
             # All-gather across the partitions.
             output = tensor_model_parallel_all_gather(output_parallel)

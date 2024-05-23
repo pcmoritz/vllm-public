@@ -228,21 +228,18 @@ class Fp8LinearMethod(LinearMethodBase):
               layer: torch.nn.Module,
               x: torch.Tensor,
               bias: Optional[torch.Tensor] = None,
-              activation: Optional[str] = None) -> torch.Tensor:
+              activation: Optional[str] = None,
+              output_scale: Optional[torch.Tensor] = None) -> torch.Tensor:
         if activation == "silu":
             # print("XXX", layer.weight.shape, layer.weight.is_contiguous())
             from vllm.model_executor.layers.fused_silu.fused_silu import fused_silu
             qinput, x_scale = ops.scaled_fp8_quant(x, layer.act_scale)
             shape = layer.weight.shape
-            # TODO: Need to adapt second scale
-            c_scale = torch.ones(1,
-                         device=x.device,
-                         dtype=torch.float32)
             return fused_silu(
                 qinput,
                 layer.weight[:shape[0]//2,:].t(),
                 layer.weight[shape[0]//2:,:].t(),
-                x_scale, layer.weight_scale, c_scale,
+                x_scale, layer.weight_scale, output_scale,
                 override_config={
                     "BLOCK_SIZE_M": 16,
                     "BLOCK_SIZE_N": 64,

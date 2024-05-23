@@ -81,7 +81,7 @@ class LlamaMLP(nn.Module):
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
-        x, _ = self.gate_up_proj(x)
+        x, _ = self.gate_up_proj(x, output_scale=self.down_proj.act_scale)
         # x = self.act_fn(gate_up)
         x, _ = self.down_proj(x)
         return x

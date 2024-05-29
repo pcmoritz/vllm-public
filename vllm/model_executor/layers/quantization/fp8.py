@@ -234,6 +234,7 @@ class Fp8LinearMethod(LinearMethodBase):
             # print("XXX", layer.weight.shape, layer.weight.is_contiguous())
             from vllm.model_executor.layers.fused_silu.fused_silu import fused_silu
             assert layer.act_scale is not None
+            assert bias is None
             qinput, x_scale = ops.scaled_fp8_quant(x, layer.act_scale)
             shape = layer.weight.shape
             return fused_silu(

@@ -85,7 +85,7 @@ def matmul_kernel(
         b1_ptrs += BLOCK_SIZE_K * stride_bk
         b2_ptrs += BLOCK_SIZE_K * stride_bk
 
-    c = (acc1 * ab_scale * silu(acc2 * ab_scale) / c_scale).to(tl.float8e4nv)
+    c = (silu(acc1 * ab_scale) * acc2 * ab_scale / c_scale).to(tl.float8e4nv)
 
     # -----------------------------------------------------------
     # Write back the block of the output matrix C with masks.

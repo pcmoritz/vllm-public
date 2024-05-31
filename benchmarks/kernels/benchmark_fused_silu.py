@@ -13,20 +13,18 @@ from vllm.model_executor.layers.fused_silu.fused_silu import fused_silu
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
-def main(dtype: str):
+def main():
     method = fused_silu
     for bs in [
             1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 256, 512, 1024, 1536,
             2048, 3072, 4096
     ]:
-        run_grid(bs, method=method, dtype=dtype)
+        run_grid(bs, method=method)
 
-def run_grid(bs, method, dtype: str):
-    d_model = 8192
-    num_total_experts = 8
-    top_k = 2
-    tp_size = 4
-    model_intermediate_size = 28672
+def run_grid(bs, method):
+    d_model = 4096
+    tp_size = 1
+    model_intermediate_size = 14336
     num_layers = 32
     num_calls = 100
 
@@ -40,7 +38,7 @@ def run_grid(bs, method, dtype: str):
             for block_size_k in [32, 64, 128, 256]:
                 for group_size_m in [1, 16, 32, 64]:
                     for num_warps in [2, 4, 8]:
-                        for num_stages in [2, 3, 4, 5, 6]:
+                        for num_stages in [4, 5, 6]:
                             configs.append({
                                 "BLOCK_SIZE_M": block_size_m,
                                 "BLOCK_SIZE_N": block_size_n,
@@ -67,7 +65,6 @@ def run_grid(bs, method, dtype: str):
                     model_intermediate_size=model_intermediate_size,
                     method=method,
                     config=config,
-                    dtype=dtype,
                 )
         except triton.runtime.autotuner.OutOfResources:
             continue
@@ -82,7 +79,6 @@ def run_grid(bs, method, dtype: str):
                 model_intermediate_size=model_intermediate_size,
                 method=method,
                 config=config,
-                dtype=dtype,
             )
 
             kernel_dur_us = 1000 * kernel_dur_ms
@@ -94,7 +90,7 @@ def run_grid(bs, method, dtype: str):
 
                 tqdm.write(
                     f'{kernel_dur_us=:.1f} {model_dur_ms=:.1f}'
-                    f' {bs=} {tp_size=} {top_k=} {num_total_experts=} '
+                    f' {bs=} {tp_size=} '
                     f'{d_model=} {model_intermediate_size=} {num_layers=}')
 
     print("best_time_us", best_time_us)
@@ -114,7 +110,7 @@ def run_grid(bs, method, dtype: str):
 
 def run_timing(num_calls: int, bs: int, d_model: int,
                tp_size: int, model_intermediate_size: int, method,
-               config, dtype: str) -> float:
+               config) -> float:
     shard_intermediate_size = model_intermediate_size // tp_size
 
     hidden_states = torch.rand(
@@ -167,16 +163,4 @@ def run_timing(num_calls: int, bs: int, d_model: int,
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        prog='benchmark_mixtral_moe',
-        description='Benchmark and tune the fused_silu kernel',
-    )
-    parser.add_argument(
-        '--dtype',
-        type=str,
-        default='auto',
-        choices=['float8', 'float16'],
-        help='Data type used for fused_silu kernel computations',
-    )
-    args = parser.parse_args()
-    sys.exit(main(args.dtype))
+    sys.exit(main())

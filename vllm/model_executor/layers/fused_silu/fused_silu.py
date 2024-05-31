@@ -1,3 +1,6 @@
+import functools
+import json
+import os
 from typing import Optional, Any, Dict
 
 import torch
@@ -5,6 +8,9 @@ import torch
 import triton
 import triton.language as tl
 
+from vllm.logger import init_logger
+
+logger = init_logger(__name__)
 
 @triton.jit
 def silu(input):
@@ -95,10 +101,29 @@ def matmul_kernel(
     c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
     tl.store(c_ptrs, c, mask=c_mask)
 
+@functools.lru_cache
+def get_silu_configs() -> Optional[Dict[int, Any]]:
+    config_file_path = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), "config.json")
+    if os.path.exists(config_file_path):
+        with open(config_file_path) as f:
+            logger.info("Using configuration from %s for silu layer.",
+                        config_file_path)
+            # If a configuration has been found, return it
+            return {int(key): val for key, val in json.load(f).items()}
+
+    # If no optimized configuration is available, we will use the default
+    # configuration
+    return None
+
 def fused_silu(a, b1, b2, a_scale, b_scale, c_scale, override_config: Optional[Dict[str, Any]] = None):
 
-    if not override_config:
-        override_config = {}
+    if override_config:
+        config = override_config
+    else:
+        configs = get_silu_configs()
+        assert configs
+        config = configs[min(configs.keys(), key=lambda x: abs(x - M))]
 
     # Check constraints.
     assert a.shape[1] == b1.shape[0], f"Incompatible dimensions {a.shape[1]} != {b1.shape[0]}"
@@ -118,7 +143,7 @@ def fused_silu(a, b1, b2, a_scale, b_scale, c_scale, override_config: Optional[D
         a.stride(0), a.stride(1),
         b1.stride(0), b1.stride(1),
         c.stride(0), c.stride(1),
-        **override_config,
+        **config,
     )
     return c
 

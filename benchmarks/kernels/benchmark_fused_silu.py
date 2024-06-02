@@ -16,7 +16,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 def main():
     method = fused_silu
     for bs in [
-            1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128, 256, 512, 1024, 1536,
+            96, 128, 256, 512, 1024, 1536,
             2048, 3072, 4096
     ]:
         run_grid(bs, method=method)
@@ -34,10 +34,10 @@ def run_grid(bs, method):
     configs = []
 
     for block_size_n in [32, 64, 128, 256]:
-        for block_size_m in [16, 32, 64]:
+        for block_size_m in [32, 64, 128, 256]:
             for block_size_k in [32, 64, 128, 256]:
-                for group_size_m in [1, 16, 32, 64]:
-                    for num_warps in [2, 4, 8]:
+                for group_size_m in [1, 16, 64]:
+                    for num_warps in [4, 8]:
                         for num_stages in [4, 5, 6]:
                             configs.append({
                                 "BLOCK_SIZE_M": block_size_m,

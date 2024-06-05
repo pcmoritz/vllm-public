@@ -149,9 +149,10 @@ def fused_moe_kernel(
         b = tl.load(b_ptrs,
                     mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
                     other=0.0)
-        b2 = tl.load(b_ptrs2,
-                    mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
-                    other=0.0)
+        if not MUL_ROUTED_WEIGHT:
+            b2 = tl.load(b_ptrs2,
+                         mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
+                         other=0.0)
         # We accumulate along the K dimension.
         if use_fp8:
             acc = tl.dot(a, b, acc=acc)

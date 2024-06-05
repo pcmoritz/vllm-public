@@ -232,13 +232,31 @@ class Fp8LinearMethod(LinearMethodBase):
     def apply(self,
               layer: torch.nn.Module,
               x: torch.Tensor,
-              bias: Optional[torch.Tensor] = None) -> torch.Tensor:
-        # ops.scaled_fp8_quant supports both dynamic and static quant.
-        #   If dynamic, layer.act_scale is None and x_scale computed from x.
-        #   If static,  layer.act_scale is scalar and x_scale set to act_scale.
-        qinput, x_scale = ops.scaled_fp8_quant(x,
-                                               layer.act_scale,
-                                               batch_dim_padding=17)
+              bias: Optional[torch.Tensor] = None,
+              activation: Optional[str] = None,
+              output_scale: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if activation == "silu":
+            from vllm.model_executor.layers.fused_silu.fused_silu import fused_silu
+            assert layer.act_scale is not None
+            assert bias is None
+            qinput, x_scale = ops.scaled_fp8_quant(x, layer.act_scale)
+            shape = layer.weight.shape
+            return fused_silu(
+                qinput,
+                layer.weight[:,:shape[1]//2],
+                layer.weight[:,shape[1]//2:],
+                x_scale, layer.weight_scale, output_scale,
+            )
+        if x.dtype == torch.float8_e4m3fn:
+            qinput = x
+            x_scale = layer.act_scale
+        else:
+            # ops.scaled_fp8_quant supports both dynamic and static quant.
+            #   If dynamic, layer.act_scale is None and x_scale computed from x.
+            #   If static,  layer.act_scale is scalar and x_scale set to act_scale.
+            qinput, x_scale = ops.scaled_fp8_quant(x,
+                                                   layer.act_scale,
+                                                   batch_dim_padding=17)
 
         # Fused GEMM_DQ -- note we padded the input above because
         # torch._scaled_mm is more performant for matrices with
@@ -247,7 +265,7 @@ class Fp8LinearMethod(LinearMethodBase):
         output, _ = torch._scaled_mm(
             qinput,
             layer.weight,
-            out_dtype=x.dtype,
+            out_dtype=torch.bfloat16,
             scale_a=x_scale,
             scale_b=layer.weight_scale,
             bias=bias,

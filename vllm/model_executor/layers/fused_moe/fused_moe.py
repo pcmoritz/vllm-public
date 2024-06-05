@@ -182,7 +182,10 @@ def fused_moe_kernel(
     offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
     c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
         None, :]
-    c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
+    if not MUL_ROUTED_WEIGHT:
+        c_mask = token_mask[:, None] & (offs_cn[None, :] < N // 2)
+    else:
+        c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
     tl.store(c_ptrs, acc, mask=c_mask)
 
 

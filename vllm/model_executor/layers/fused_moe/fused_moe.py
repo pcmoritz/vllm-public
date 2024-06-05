@@ -16,6 +16,11 @@ logger = init_logger(__name__)
 
 
 @triton.jit
+def silu(input):
+    return input / (1 + tl.exp(-input))
+
+
+@triton.jit
 def fused_moe_kernel(
     # Pointers to matrices
     a_ptr,
@@ -105,7 +110,11 @@ def fused_moe_kernel(
     offs_token = tl.load(sorted_token_ids_ptr + offs_token_id)
     token_mask = offs_token < num_valid_tokens
 
-    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
+    if not MUL_ROUTED_WEIGHT:
+        offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % (N // 2)
+        offs_bn2 = (N // 2 + pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % (N // 2)
+    else:
+        offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
     offs_k = tl.arange(0, BLOCK_SIZE_K)
     a_ptrs = a_ptr + (offs_token[:, None] // top_k * stride_am +
                       offs_k[None, :] * stride_ak)
@@ -113,6 +122,9 @@ def fused_moe_kernel(
     off_experts = tl.load(expert_ids_ptr + pid_m)
     b_ptrs = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
                                                 offs_bn[None, :] * stride_bn)
+    if not MUL_ROUTED_WEIGHT:
+        b_ptrs2 = b_ptr + off_experts * stride_be + (offs_k[:, None] * stride_bk +
+                                                     offs_bn2[None, :] * stride_bn)
 
     if use_fp8:
         a_scale = tl.load(a_scale_ptr)
@@ -123,7 +135,9 @@ def fused_moe_kernel(
     # We accumulate into a `[BLOCK_SIZE_M, BLOCK_SIZE_N]` block
     # of fp32 values for higher accuracy.
     # `accumulator` will be converted back to fp16 after the loop.
-    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+    acc = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+    if not MUL_ROUTED_WEIGHT:
+        acc2 = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
 
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
         # Load the next block of A and B, generate a mask by checking the
@@ -135,32 +149,41 @@ def fused_moe_kernel(
         b = tl.load(b_ptrs,
                     mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
                     other=0.0)
+        b2 = tl.load(b_ptrs2,
+                    mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
+                    other=0.0)
         # We accumulate along the K dimension.
         if use_fp8:
-            accumulator = tl.dot(a, b, acc=accumulator)
+            acc = tl.dot(a, b, acc=acc)
+            if not MUL_ROUTED_WEIGHT:
+                acc2 = tl.dot(a, b2, acc=acc2)
         else:
-            accumulator += tl.dot(a, b)
+            acc += tl.dot(a, b)
         # Advance the ptrs to the next K block.
         a_ptrs += BLOCK_SIZE_K * stride_ak
         b_ptrs += BLOCK_SIZE_K * stride_bk
+        if not MUL_ROUTED_WEIGHT:
+            b_ptrs2 += BLOCK_SIZE_K * stride_bk
 
     if MUL_ROUTED_WEIGHT:
         moe_weight = tl.load(topk_weights_ptr + offs_token,
                              mask=token_mask,
                              other=0)
-        accumulator = accumulator * moe_weight[:, None]
-
-    if use_fp8:
-        accumulator = (accumulator * a_scale * b_scale).to(compute_type)
+        acc = acc * moe_weight[:, None]
     else:
-        accumulator = accumulator.to(compute_type)
+        acc = silu(acc * a_scale * b_scale) * acc2 * a_scale * b_scale
+
+    if use_fp8 and MUL_ROUTED_WEIGHT:
+        acc = (acc * a_scale * b_scale).to(compute_type)
+    else:
+        acc = acc.to(compute_type)
     # -----------------------------------------------------------
     # Write back the block of the output
     offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
     c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_cn[
         None, :]
     c_mask = token_mask[:, None] & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, accumulator, mask=c_mask)
+    tl.store(c_ptrs, acc, mask=c_mask)
 
 
 def moe_align_block_size(
@@ -410,10 +433,7 @@ def fused_experts(hidden_states: torch.Tensor,
                                         topk_ids.shape[1],
                                         "float8" if use_fp8 else None)
 
-    intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N),
-                                      device=hidden_states.device,
-                                      dtype=hidden_states.dtype)
-    intermediate_cache2 = torch.empty((M * topk_ids.shape[1], N // 2),
+    intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
@@ -441,9 +461,7 @@ def fused_experts(hidden_states: torch.Tensor,
                             compute_type=compute_type,
                             use_fp8=use_fp8)
 
-    ops.silu_and_mul(intermediate_cache2, intermediate_cache1.view(-1, N))
-
-    invoke_fused_moe_kernel(intermediate_cache2,
+    invoke_fused_moe_kernel(intermediate_cache1,
                             w2,
                             intermediate_cache3,
                             a2_scale,

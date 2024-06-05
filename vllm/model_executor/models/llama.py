@@ -75,11 +75,11 @@ class LlamaMLP(nn.Module):
                              "Only silu is supported for now.")
         self.act_fn = SiluAndMul()
 
-    def forward(self, x):
-        x, _ = self.gate_up_proj(x, activation="silu", output_scale=self.down_proj.act_scale)
+    def forward(self, input):
+        x, _ = self.gate_up_proj(input, activation="silu", output_scale=self.down_proj.act_scale)
         # x = self.act_fn(gate_up)
         x, _ = self.down_proj(x)
-        return x
+        return torch.narrow(x, 0, 0, input.shape[0])
 
 
 class LlamaAttention(nn.Module):

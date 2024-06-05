@@ -110,11 +110,9 @@ def fused_moe_kernel(
     offs_token = tl.load(sorted_token_ids_ptr + offs_token_id)
     token_mask = offs_token < num_valid_tokens
 
+    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
     if not MUL_ROUTED_WEIGHT:
-        offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % (N // 2)
-        offs_bn2 = (N // 2 + pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % (N // 2)
-    else:
-        offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
+        offs_bn2 = (N // 2 + pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
     offs_k = tl.arange(0, BLOCK_SIZE_K)
     a_ptrs = a_ptr + (offs_token[:, None] // top_k * stride_am +
                       offs_k[None, :] * stride_ak)
@@ -268,7 +266,7 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
         assert B_scale is not None
 
     grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[
-        'BLOCK_SIZE_M']) * triton.cdiv(B.shape[1], META['BLOCK_SIZE_N']), )
+        'BLOCK_SIZE_M']) * triton.cdiv(B.shape[1] if mul_routed_weight else B.shape[1] // 2, META['BLOCK_SIZE_N']), )
 
     fused_moe_kernel[grid](
         A,

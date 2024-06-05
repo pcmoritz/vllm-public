@@ -118,13 +118,6 @@ def get_silu_configs() -> Optional[Dict[int, Any]]:
 
 def fused_silu(a, b1, b2, a_scale, b_scale, c_scale, override_config: Optional[Dict[str, Any]] = None):
 
-    if override_config:
-        config = override_config
-    else:
-        configs = get_silu_configs()
-        assert configs
-        config = configs[min(configs.keys(), key=lambda x: abs(x - M))]
-
     # Check constraints.
     assert a.shape[1] == b1.shape[0], f"Incompatible dimensions {a.shape[1]} != {b1.shape[0]}"
     assert a.shape[1] == b2.shape[0], f"Incompatible dimensions {a.shape[1]} != {b2.shape[0]}"
@@ -132,6 +125,14 @@ def fused_silu(a, b1, b2, a_scale, b_scale, c_scale, override_config: Optional[D
     assert a.is_contiguous(), "Matrix A must be contiguous"
     M, K = a.shape
     K, N = b1.shape
+
+    if override_config:
+        config = override_config
+    else:
+        configs = get_silu_configs()
+        assert configs
+        config = configs[min(configs.keys(), key=lambda x: abs(x - M))]
+
     # Allocates output.
     c = torch.empty((M, N), device=a.device, dtype=torch.float8_e4m3fn)
     # 1D launch kernel where each block gets its own program.

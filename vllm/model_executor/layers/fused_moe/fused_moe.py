@@ -173,7 +173,7 @@ def fused_moe_kernel(
         acc = silu(acc * a_scale * b_scale) * acc2 * a_scale * b_scale
 
     if use_fp8 and MUL_ROUTED_WEIGHT:
-        acc = (acc * a_scale * b_scale).to(tl.float8e4nv)
+        acc = (acc * a_scale * b_scale).to(compute_type)
     else:
         acc = acc.to(compute_type)
     # -----------------------------------------------------------
@@ -261,7 +261,7 @@ def invoke_fused_moe_kernel(A: torch.Tensor, B: torch.Tensor, C: torch.Tensor,
     if not use_fp8:
         assert A_scale is None
         assert B_scale is None
-    elif A.dtype != torch.float8_e4m3fn:
+    else:
         A, A_scale = ops.scaled_fp8_quant(A, A_scale)
         assert B_scale is not None
 
@@ -437,7 +437,7 @@ def fused_experts(hidden_states: torch.Tensor,
 
     intermediate_cache1 = torch.empty((M, topk_ids.shape[1], N // 2),
                                       device=hidden_states.device,
-                                      dtype=torch.float8_e4m3fn)
+                                      dtype=hidden_states.dtype)
     intermediate_cache3 = torch.empty((M, topk_ids.shape[1], w2.shape[1]),
                                       device=hidden_states.device,
                                       dtype=hidden_states.dtype)
